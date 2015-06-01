@@ -25,19 +25,23 @@ unit PdfJpegImage;
 interface
 
 uses
-  SysUtils, Classes, Graphics, PdfTypes, PdfDoc, PdfImages, JPEG;
-
+  SysUtils, Classes, Graphics, PdfTypes, PdfDoc, PdfImages
+  {$IFDEF LAZ_POWERPDF}
+  {$ELSE}
+  ,JPEG
+  {$ENDIF}
+  ;
 type
   { TPdfJpegImage }
   TPdfJpegImage = class(TPdfImageCreator)
   public
-    function CreateImage(AImage: TGraphic): TPdfImage; override;
+    function CreateImage(AImage: TGraphic; ObjectMgr: TPdfObjectMgr=nil): TPdfImage; override;
   end;
 
 implementation
 
 // CreateImage
-function TPdfJpegImage.CreateImage(AImage: TGraphic): TPdfImage;
+function TPdfJpegImage.CreateImage(AImage: TGraphic; ObjectMgr: TPdfObjectMgr=nil): TPdfImage;
 begin
   // check whether specified graphic is valid image.
   if not (AImage is TJpegImage) then
@@ -51,13 +55,10 @@ begin
     begin
       AddItem('Type', TPdfName.CreateName('XObject'));
       AddItem('Subtype', TPdfName.CreateName('Image'));
-
-      // Hier auf Graustufen prüfen
-      If TJpegImage(Aimage).Grayscale Then
-       AddItem('ColorSpace', TPdfName.CreateName('DeviceGray'))
-      Else
-       AddItem('ColorSpace', TPdfName.CreateName('DeviceRGB')); // ursprünglich wird immer RGB geschrieben
-
+      if TJPegImage(AImage).GrayScale then
+        AddItem('ColorSpace', TPdfName.CreateName('DeviceGray'))
+      else
+        AddItem('ColorSpace', TPdfName.CreateName('DeviceRGB'));
       AddItem('Width', TPdfNumber.CreateNumber(AImage.Width));
       AddItem('Height', TPdfNumber.CreateNumber(AImage.Height));
       AddItem('BitsPerComponent', TPdfNumber.CreateNumber(8));
@@ -66,12 +67,17 @@ begin
   except
     result.Free;
     raise;
-  end; 
-end;  
+  end;
+
+end;
 
 initialization
 
+  {$IFDEF LAZ_POWERPDF}
+  PdfLazRegisterClassAlias(TPdfJpegImage, 'Pdf-Jpeg');
+  {$ELSE}
   RegisterClassAlias(TPdfJpegImage, 'Pdf-Jpeg');
+  {$ENDIF}
 
 finalization
 

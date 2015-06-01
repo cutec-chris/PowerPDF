@@ -21,6 +21,9 @@
  * Create 2001.04.16
  *
  *}
+{$IFDEF LAZ_POWERPDF}
+{$H+}
+{$ENDIF}
 unit PdfJpCMap;
 
 interface

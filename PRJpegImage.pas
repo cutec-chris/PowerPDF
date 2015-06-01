@@ -25,8 +25,13 @@ unit PRJpegImage;
 interface
 
 uses
-  Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
-  PReport, PdfDoc, PdfTypes, PdfImages, PdfJpegImage, JPEG;
+  SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
+  PReport, PdfDoc, PdfTypes, PdfImages, PdfJpegImage
+  {$IFDEF LAZ_POWERPDF}
+  {$ELSE}
+  ,Windows, Messages, JPEG
+  {$ENDIF}
+  ;
 
 type
   TPRJpegImage = class(TPRImage)
@@ -42,12 +47,12 @@ procedure TPRJpegImage.Print(ACanvas: TPRCanvas; ARect: TRect);
 var
   FDoc: TPdfDoc;
   FXObjectName: string;
-  i: integer;
+  i,AWidth,AHeight: integer;
 begin
   if not Printable then Exit;
-
+  
   if (FPicture = nil) or (FPicture.Graphic = nil) or
-   (FPicture.Graphic.Empty) or not (FPicture.Graphic is TJpegImage) then
+   (FPicture.Graphic.Empty) or not (FPicture.Graphic is TJpegImage)then
     Exit;
   FDoc := ACanvas.PdfCanvas.Doc;
   if SharedImage then
@@ -68,8 +73,13 @@ begin
     FDoc.AddXObject(FXObjectName, CreatePdfImage(FPicture.Graphic, 'Pdf-Jpeg'));
   end;
   with ARect, ACanvas.PdfCanvas do
-    if FStretch then
-      DrawXObject(Left, Self.Page.Height - Bottom, Width, Height, FXObjectName)
+    if FStretch then begin
+      AWidth := Width;
+      AHeight := Height;
+      if Proportional then
+        CalcProportionalBounds(AWidth, AHeight);
+      DrawXObject(Left, Self.Page.Height - Top - AHeight, AWidth, AHeight, FXObjectName)
+    end
     else
       DrawXObjectEx(Left, Self.Page.Height - Top - FPicture.Height,
             FPicture.Width, FPicture.Height,

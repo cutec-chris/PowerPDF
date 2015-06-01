@@ -23,61 +23,99 @@
  * 2001.09.01 changed the implementation of the image.
  *
  *}
+{$IFDEF LAZ_POWERPDF}
+{$H+}
+{$ENDIF}
 unit PdfImages;
 
 interface
 
+{$IFDEF UNIX}
+  {$IFDEF LAZ_POWERPDF}
+  {$ELSE}
+  {$DEFINE USE_CLX}
+  {$ENDIF}
+{$ENDIF}
+
 uses
-  SysUtils, Windows, Graphics, Classes, PdfTypes, PdfDoc;
+  SysUtils,
+  {$IFNDEF USE_CLX}
+  {$IFDEF LAZ_POWERPDF}
+  LCLType, LCLIntf, Graphics, FPImage, IntfGraphics, BmpComn,
+  {$ELSE}
+  Windows, Graphics,
+  {$ENDIF}
+  {$ELSE}
+  QGraphics, Qt,
+  {$ENDIF}
+  Classes, PdfTypes, PdfDoc;
 
 type
   TPdfImageCreator = class(TPersistent)
   public
-    function CreateImage(AImage: TGraphic): TPdfImage; virtual;
+    function CreateImage(AImage: TGraphic; ObjectMgr: TPdfObjectMgr=nil): TPdfImage; virtual;
   end;
+
+  { TPdfBitmapImage }
 
   TPdfBitmapImage = class(TPdfImageCreator)
   private
     function CreateIndexedColorArray(ABitmap: TBitmap): TPdfArray;
+    function CreateMaskStream(AImage: TFPCustomImage): TPDfImage;
   public
-    function CreateImage(AImage: TGraphic): TPdfImage; override;
+    function CreateImage(AImage: TGraphic; ObjectMgr: TPdfObjectMgr=nil): TPdfImage; override;
   end;
 
   EPdfInvalidImageFormat = class(Exception);
 
-  function CreatePdfImage(AImage: TGraphic; ImageClassName: string): TPdfImage;
+  function CreatePdfImage(AImage: TGraphic; ImageClassName: string; ObjectMgr: TPdfObjectMgr=nil): TPdfImage;
 
 implementation
 
-function CreatePdfImage(AImage: TGraphic; ImageClassName: string): TPdfImage;
+function CreatePdfImage(AImage: TGraphic; ImageClassName: string; ObjectMgr: TPdfObjectMgr=nil): TPdfImage;
 var
   PdfImageCreator: TPdfImageCreator;
 begin
   Result := nil;
+  {$IFDEF LAZ_POWERPDF}
+  PdfImageCreator := TPdfImageCreator(PdfLazFindClass(ImageClassName).Create);
+  {$ELSE}
   PdfImageCreator := TPdfImageCreator(FindClass(ImageClassName).Create);
+  {$ENDIF}
   try
     if PdfImageCreator = nil then
       raise Exception.CreateFmt('AddImage --InvalidImageClassName:%s', [ImageClassName]);
-    Result := PdfImageCreator.CreateImage(AImage);
+    Result := PdfImageCreator.CreateImage(AImage, ObjectMgr);
   finally
     PdfImageCreator.Free;
   end;
 end;
 
 { TPdfImageCreator }
-function TPdfImageCreator.CreateImage(AImage: TGraphic): TPdfImage;
+function TPdfImageCreator.CreateImage(AImage: TGraphic; ObjectMgr: TPdfObjectMgr=nil): TPdfImage;
 begin
   result := nil;
 end;
 
+{$IFDEF USE_CLX}
+type
+  TColorTable = array[0..MaxInt div SizeOf(QRgb)-1] of QRgb;
+  PColorTable = ^TColorTable;
+{$ENDIF}
+
 function TPdfBitmapImage.CreateIndexedColorArray(ABitmap: TBitmap): TPdfArray;
 var
+  {$IFNDEF USE_CLX}
   PalEntries: array[0..255] of TPaletteEntry;
+  {$ELSE}
+  PalEntries: PColorTable;
+  CRgb: Cardinal;
+  pb: PByteArray;
+  {$ENDIF}
   i: integer;
   ColorTable: TPdfBinary;
   NumOfColors: integer;
   S: string;
-  sAnsi: AnsiString;
 begin
   // creating color table from palette of bitmap.
 
@@ -114,10 +152,7 @@ begin
   {$ENDIF}
 
   S := S + '>';
-  //The Stream should be ansified
-  sAnsi := AnsiString(S);
-  ColorTable.Stream.Write(PAnsiChar(sAnsi)^, Length(sAnsi));
-//  ColorTable.Stream.Write(PChar(S)^, Length(S) * SizeOf(Char));
+  ColorTable.Stream.Write(PChar(S)^, Length(S));
 
   result := TPdfArray.CreateArray(nil);
   with result do
@@ -129,15 +164,60 @@ begin
   end;
 end;
 
-function TPdfBitmapImage.CreateImage(AImage: TGraphic): TPdfImage;
+function TPdfBitmapImage.CreateMaskStream(AImage: TFPCustomImage): TPDfImage;
+var
+  pb: PByteArray;
+  y: Integer;
+  x: Integer;
+begin
+  result := TPdfImage.CreateStream(nil);
+  with result do
+  try
+    with Attributes do
+    begin
+      AddItem('Type', TPdfName.CreateName('XObject'));
+      AddItem('Subtype', TPdfName.CreateName('Image'));
+      AddItem('Width', TPdfNumber.CreateNumber(aImage.Width));
+      AddItem('Height', TPdfNumber.CreateNumber(aImage.Height));
+      AddItem('BitsPerComponent', TPdfNumber.CreateNumber(8));
+      AddItem('ColorSpace',TPdfName.CreateName('DeviceGray'));
+      if USE_ZLIB then
+        PdfArrayByName('Filter').AddItem(TPdfName.CreateName('FlateDecode'));
+
+      new(pb);
+      for y := 0 to AImage.Height - 1 do
+      begin
+        for x := 0 to AImage.Width-1 do
+          pb^[x] := AImage.Pixels[x,y];
+        Stream.Write(pb^, AImage.Width);
+      end;
+      dispose(pb);
+    end;
+
+  finally
+  end;
+end;
+
+function TPdfBitmapImage.CreateImage(AImage: TGraphic; ObjectMgr: TPdfObjectMgr=nil): TPdfImage;
 var
   ABitmap: TBitmap;
   x, y: integer;
   pb: PByteArray;
   b: Byte;
+{$IFDEF LAZ_POWERPDF}
+  aIntfImage: TLazIntfImage;
+  aColor    : TFPColor;
+  Alpha      : TFPMemoryImage;
+  maskimage : TPDFImage;
+  hasAlpha   : boolean;
+{$endif}
+
+{$IFDEF USE_CLX}
 const
-  PIXEL_COLOR_SIZE = 3;
+  PIXEL_COLOR_SIZE = 4;
+{$ENDIF}
 begin
+
   result := TPdfImage.CreateStream(nil);
   with result do
   try
@@ -148,10 +228,15 @@ begin
     end;
 
     ABitmap := TBitmap.Create;
+    
     with ABitmap do
     try
       Assign(AImage);
 
+{$IFDEF FPC}
+      aIntfImage := TLazIntfImage.Create(0,0);
+      aIntfImage.LoadFromBitmap(aBitmap.Handle, aBitmap.MaskHandle);
+{$ENDIF}
       // if bitmap image has less then 8 bit color, set PixelFormat to 8 bit.
       if (PixelFormat = pf1bit) or
          {$IFNDEF USE_CLX}
@@ -169,15 +254,35 @@ begin
       // translate TBitmap object to pdf image format.
       if PixelFormat = pf8bit then
       begin
+{$IFNDEF FPC}
         for y := 0 to Height - 1 do
         begin
           pb := ScanLine[y];
           Stream.Write(pb^, Width);
+{$ELSE}
+        for y := 0 to aintfimage.Height - 1 do
+        begin
+          new(pb);
+          
+          for x := 0 to aintfimage.Width-1 do
+          begin
+            aColor := aIntfImage.Colors[x,y];
+            { kleurwaarden worden als 16bits waarden opgeslagen, we kappen er
+              dus 8 van af.
+              red is willekeurig genomen
+            }
+            pb^[x] := acolor.red shr 8;
+          end;
+
+          Stream.Write(pb^, Width);
+          dispose(pb);
+{$ENDIF}
         end;
         Attributes.AddItem('ColorSpace', CreateIndexedColorArray(ABitmap));
       end
       else
       begin
+{$ifndef fpc}
         for y := 0 to Height - 1 do
         begin
           pb := ScanLine[y];
@@ -192,12 +297,61 @@ begin
           end;
           Attributes.AddItem('ColorSpace', TPdfName.CreateName('DeviceRGB'));
         end;
+{$else}
+        Alpha := TFPMemoryImage.Create(AImage.Width, AImage.Height);
+        Alpha.UsePalette := true;
+        Alpha.Palette.Count := 256;
+        for x:=0 to $FF do
+        begin
+          aColor.Red:=x;
+          aColor.Red:=(aColor.Red shl 8) + aColor.Red;
+          aColor.Green:=aColor.Red;
+          aColor.Blue:=aColor.Red;
+          Alpha.Palette.Color[x]:=aColor;
+        end;
+        HasAlpha := false;
+
+        for y := 0 to aintfimage.Height - 1 do
+        begin
+          new(pb);
+          for x := 0 to aintfimage.Width-1 do
+          begin
+            aColor := aIntfImage.Colors[x,y];
+            pb[ 0 ] := acolor.red shr 8;
+            pb[ 1 ] := acolor.green shr 8;
+            pb[ 2 ] := acolor.blue shr 8;
+            Stream.write(pb[ 0 ], 3);
+
+            b := acolor.alpha shr 8;
+            Alpha.Pixels[x,y] := b;
+
+            if acolor.Alpha<>AlphaOpaque then
+              HasAlpha := true;
+          end;
+          dispose(pb);
+          Attributes.AddItem('ColorSpace', TPdfName.CreateName('DeviceRGB'));
+        end;
+
+        if HasAlpha then begin
+          MaskImage := CreateMaskStream(Alpha);
+          if ObjectMgr<>nil then
+            ObjectMgr.AddObject(MaskImage);
+          Attributes.AddItem('SMask', MaskImage);
+        end;
+
+        Alpha.Free;
+{$endif}
       end;
 
       with Attributes do
       begin
-        AddItem('Width', TPdfNumber.CreateNumber(Width));
-        AddItem('Height', TPdfNumber.CreateNumber(Height));
+{$IFDEF FPC}
+        AddItem('Width', TPdfNumber.CreateNumber(aintfimage.Width));
+        AddItem('Height', TPdfNumber.CreateNumber(aintfimage.Height));
+{$ELSE}
+        AddItem('Width', TPdfNumber.CreateNumber(abitmap.Width));
+        AddItem('Height', TPdfNumber.CreateNumber(abitmap.Height));
+{$ENDIF}
         AddItem('BitsPerComponent', TPdfNumber.CreateNumber(8));
         if USE_ZLIB then
           PdfArrayByName('Filter').AddItem(TPdfName.CreateName('FlateDecode'));
@@ -205,6 +359,10 @@ begin
     finally
       Free;
     end;
+    
+{$IFDEF FPC}
+    aIntfImage.Free();
+{$ENDIF}
   except
     result.Free;
     raise;
@@ -212,7 +370,11 @@ begin
 end;
 
 initialization
+  {$IFDEF LAZ_POWERPDF}
+  PdfLazRegisterClassAlias(TPdfBitmapImage, 'Pdf-Bitmap');
+  {$ELSE}
   RegisterClassAlias(TPdfBitmapImage, 'Pdf-Bitmap');
+  {$ENDIF}
 
 finalization
   UnRegisterClass(TPdfBitmapImage);

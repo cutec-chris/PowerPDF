@@ -38,11 +38,20 @@ unit PReport;
 
 interface
 
+{$IFDEF LAZ_POWERPDF}
+{$mode objfpc}{$H+}
+{$ENDIF}
+
 //{$DEFINE USE_JPFONTS}
 //{$DEFINE USE_GBFONTS}
 
 uses
-  Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
+  {$IFDEF LAZ_POWERPDF}
+  LCLType, LMessages, LCLIntf, GraphType, FPCanvas, LCLProc,
+  {$ELSE}
+  Windows, Messages,
+  {$ENDIF}
+  SysUtils, Classes, GraphMath, Graphics, Controls, Forms, Dialogs,
   ExtCtrls, PdfDoc, PdfFonts, PdfTypes, PdfImages
   {$IFDEF USE_JPFONTS}
   , PdfJPFonts
@@ -55,6 +64,11 @@ uses
 const
   POWER_PDF_VERSION_STR = POWER_PDF_VERSION_TEXT;
   POWER_PDF_COPYRIGHT = 'copyright (c) 1999-2001 takeshi kanno';
+
+  {$IFDEF LAZ_POWERPDF}
+const
+  psInsideFrame = FPcanvas.psInsideFrame;
+  {$ENDIF}
 
 type
   TPRFontName = (fnFixedWidth
@@ -93,6 +107,10 @@ type
   TPRCompressionMethod = TPdfCompressionMethod;
   TPRViewerPreference = TPdfViewerPreference;
   TPRViewerPreferences = TPdfViewerPreferences;
+  TPRPoint = record
+    x,y: single;
+  end;
+  TPRPointArray = array of TPRPoint;
 
   { TPReport }
   TPReport = class(TAbstractPReport)
@@ -274,6 +292,7 @@ type
     procedure SetRowCount(Value: integer);
   protected
     procedure Print(ACanvas: TPRCanvas; ARect: TRect); override;
+    procedure GetChildren(Proc: TGetChildProc; Root: TComponent); override;
     procedure AlignControls(AControl: TControl; var ARect: TRect); override;
     procedure Paint; override;
     procedure SetParent(AParent: TWinControl); override;
@@ -281,7 +300,6 @@ type
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
-    procedure GetChildren(Proc: TGetChildProc; Root: TComponent); override;
   published
     property ColCount: integer read FColCount write SetColCount;
     property RowCount: integer read FRowCount write SetRowCount;
@@ -324,8 +342,10 @@ type
     FFontBold: boolean;
     FFontItalic: boolean;
     FCharSpace: Single;
+    FFontUnderLine: boolean;
     FWordSpace: Single;
     procedure SetCharSpace(Value: Single);
+    procedure SetFontUnderline(const Value: boolean);
     procedure SetWordSpace(Value: Single);
     procedure SetFontColor(Value: TColor);
     function GetFontClassName: string;
@@ -336,7 +356,11 @@ type
   protected
     function InternalTextout(APdfCanvas: TPdfCanvas;
                         S: string; X, Y: integer): Single;
+    {$IFDEF LAZ_POWERPDF}
+    procedure CMTextChanged(var Message: TLMessage); message CM_TEXTCHANGED;
+    {$ELSE}
     procedure CMTextChanged(var Message: TMessage); message CM_TEXTCHANGED;
+    {$ENDIF}
   public
     constructor Create(AOwner: TComponent); override;
   published
@@ -345,6 +369,7 @@ type
     property FontSize: Single read FFontSize write SetFontSize;
     property FontBold: boolean read FFontBold write SetFontBold default false;
     property FontItalic: boolean read FFontItalic write SetFontItalic default false;
+    property FontUnderline: boolean read FFontUnderLine write SetFontUnderline default false;
     property CharSpace: Single read FCharSpace write SetCharSpace;
     property WordSpace: Single read FWordSpace write SetWordSpace;
   end;
@@ -355,12 +380,15 @@ type
     FAlignment: TAlignment;
     FClipping: boolean;
     FAlignJustified: boolean;
+    FAngle: integer;
     procedure SetAlignment(Value: TAlignment);
     procedure SetAlignJustified(Value: boolean);
     procedure SetCanvasProperties(ACanvas: TPdfCanvas);
   protected
     procedure Paint; override;
     procedure Print(ACanvas: TPRCanvas; ARect: TRect); override;
+  public
+    property Angle: integer read Fangle write Fangle;
   published
     function GetTextWidth: Single;
     property Caption;
@@ -376,6 +404,7 @@ type
     FWordwrap: boolean;
     FLeading: Single;
     FLines: TStrings;
+    FAngle: integer;
     procedure SetLeading(Value: Single);
     procedure SetWordwrap(Value: boolean);
     procedure SetLines(Value: TStrings);
@@ -389,6 +418,7 @@ type
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
     property Text: string read GetText write SetText;
+    property Angle: integer read Fangle write Fangle;
   published
     property Leading: Single read FLeading write SetLeading;
     property Lines: TStrings read GetLines write SetLines;
@@ -406,8 +436,10 @@ type
     procedure SetFillColor(Value: TColor);
     procedure SetLineWidth(Value: Single);
     procedure SetLineStyle(Value: TPenStyle);
+    procedure StdFillOrStroke(ACanvas: TPdfCanvas);
   protected
     procedure SetDash(ACanvas: TPdfCAnvas; APattern: TPenStyle);
+    function  IsFillable: boolean; virtual;
   public
     constructor Create(AOwner: TComponent); override;
   published
@@ -416,12 +448,22 @@ type
     property LineStyle: TPenStyle read FLineStyle write SetLineStyle;
     property FillColor: TColor read FFillColor write SetFillColor default clNone;
   end;
+  TPRShapeClass = class of TPRShape;
 
   { TPRRect }
   TPRRect = class(TPRShape)
+  private
+    FRadius: Single;
+    FCorners: TPdfCorners;
+    function GetRadius: single;
+    procedure SetCorners(AValue: TPdfCorners);
+    procedure SetRadius(const AValue: single);
   protected
     procedure Paint; override;
     procedure Print(ACanvas: TPRCanvas; ARect: TRect); override;
+  published
+    property Radius: single read GetRadius write SetRadius;
+    property SquaredCorners: TPdfCorners read FCorners write SetCorners default [];
   end;
 
   { TPREllipse }
@@ -431,24 +473,44 @@ type
     procedure Print(ACanvas: TPRCanvas; ARect: TRect); override;
   end;
 
+  { TPRPolygon }
+  TPRPolygon = class(TPRShape)
+  protected
+    procedure Print(prCanvas: TPRCanvas; ARect: TRect); override;
+    function  IsFillable: boolean; override;
+  public
+    Points: TPRPointArray;
+  end;
+
   { TPRImage }
   TPRImage = class(TPRItem)
   private
+    FSharedName: string;
+    function GetScaleX: Single;
+    function GetScaleY: Single;
     procedure SetStretch(Value: boolean);
+    procedure SetProportional(AValue: boolean);
   protected
     FPicture: TPicture;
     FSharedImage: boolean;
     FStretch: boolean;
+    FProportional: boolean;
+    FScaleX,FScaleY: Single;
     procedure SetPicture(Value: TPicture); virtual;
     procedure Paint; override;
     procedure Print(ACanvas: TPRCanvas; ARect: TRect); override;
+    procedure CalcProportionalBounds(var AWidth, AHeight: Integer);
   public
     constructor Create(AOwner: TComponent); override;
     destructor Destroy; override;
+    property ScaleX: Single read GetScaleX write FScaleX;
+    Property ScaleY: Single read GetScaleY write FScaleY;
+    property SharedName: string read FSharedName write FSharedName;
   published
     property Picture: TPicture read FPicture write SetPicture;
     property SharedImage: boolean read FSharedImage write FSharedImage;
     property Stretch: boolean read FStretch write SetStretch default true;
+    property Proportional: boolean read FProportional write SetProportional;
   end;
 
   { TPRDestination }
@@ -506,6 +568,8 @@ type
     constructor CreateRoot(ADoc: TPdfDoc);
   end;
 
+
+  function PRPoint(x,y:single): TPRPoint;
 
 const
   LINE_PITCH: integer = 378;
@@ -625,12 +689,9 @@ const
 
 implementation
 
-uses
-  Types, UITypes;
-
 { common routines }
 
-procedure PaintGrid(Canvas: TCanvas; Width, Height: integer;
+procedure PaintGrid(Canvas: TCanvas; aWidth, aHeight: integer;
   OffsetX, OffsetY: integer);
 var
   LinePos: integer;
@@ -654,13 +715,13 @@ begin
     LineCount := 0;
     LineFlg := true;
     LinePos := - OffsetX;
-    while LinePos < Width do
+    while LinePos < aWidth do
     begin
       if LinePos > 0 then
       begin
         MoveTo(LinePos, 0);
         SetPen(Canvas, LineFlg);
-        LineTo(LinePos, Height - 1);
+        LineTo(LinePos, aHeight - 1);
       end;
       inc(LineCount);
       LineFlg := not LineFlg;
@@ -671,19 +732,90 @@ begin
     LineCount := 0;
     LineFlg := true;
     LinePos := - OffsetY;
-    while LinePos < Height do
+    while LinePos < aHeight do
     begin
       if LinePos > 0 then
       begin
         MoveTo(0, LinePos);
         SetPen(Canvas, LineFlg);
-        LineTo(Width - 1, LinePos);
+        LineTo(aWidth - 1, LinePos);
       end;
       inc(LineCount);
       LineFlg := not LineFlg;
       LinePos := trunc(LineCount * LINE_PITCH / 20) - OffsetY;
     end;
   end;
+end;
+
+function PRPoint(x, y: single): TPRPoint;
+begin
+  result.x := x;
+  result.y := y;
+end;
+
+
+procedure MixedRoundRect(Canvas:TCanvas; X1, Y1, X2, Y2: integer; RX, RY: integer;
+  SqrCorners: TPdfCorners);
+var
+  Pts: PPoint;
+  c: Integer;
+  Mx,My: Integer;
+
+  procedure Corner(Ax,Ay,Bx,By,Cx,Cy:Integer);
+  begin
+    ReallocMem(Pts, SizeOf(TPoint)*(c+3));
+//    Pts[c].x:=ax; Pts[c].y:=ay; inc(c);
+//    Pts[c].x:=bx; Pts[c].y:=by; inc(c);
+//    Pts[c].x:=cx; Pts[c].y:=cy; inc(c);
+  end;
+
+begin
+
+  X2 := X2-1;
+  Y2 := Y2-1;
+
+  // basic checks
+  if X1>X2 then
+  begin
+    c :=X2;
+    X2 := X1;
+    X1 := c;
+  end;
+  if Y1>Y2 then
+  begin
+    c := Y2;
+    Y2 := Y1;
+    Y1 := c;
+  end;
+  if RY>(Y2-Y1) then
+    RY:=(Y2-Y1);
+  if RX>(X2-X1) then
+    RX :=(X2-X1);
+
+  MX := RX div 2;
+  MY := RY div 2;
+
+  c := 0;
+  Pts := nil;
+  if pcTopLeft in SqrCorners then
+    Corner(X1+MX,Y1, X1,Y1, X1,Y1+MY)
+  else
+    BezierArcPoints(X1,Y1,RX,RY, 90*16, 90*16, 0, Pts, c);
+  if pcBottomLeft in SqrCorners then
+    Corner(X1,Y2-MY,X1,Y2,X1+MX,Y2)
+  else
+    BezierArcPoints(X1,Y2-RY,RX,RY, 180*16, 90*16, 0, Pts, c);
+  if pcBottomRight in SqrCorners then
+    Corner(X2-MX,Y2, X2,Y2, X2, Y2-MY)
+  else
+    BezierArcPoints(X2-RX,Y2-RY,RX,RY, 270*16, 90*16, 0, Pts, c);
+  if pcTopRight in SqrCorners then
+    Corner(X2,Y1+MY, X2,Y1, X2-MX,Y1)
+  else
+    BezierArcPoints(X2-RX,Y1,RX,RY, 0, 90*16, 0, Pts, c);
+
+  Canvas.Polygon(Pts, c);
+  ReallocMem(Pts, 0);
 end;
 
 { TPReport }
@@ -1056,13 +1188,13 @@ begin
   begin
     Brush.Color := clWhite;
     FillRect(GetClientRect);
-    PaintGrid(Canvas, Width, Height, 0, 0);
+    PaintGrid(Canvas, self.Width-1, self.Height-1, 0, 0);
     Font.Size := 8;
     Font.Color := clSilver;
 
     LineCount := 0;
     LinePos := 0;
-    while LinePos < Width do
+    while LinePos < self.Width do
     begin
       TextOut(LinePos + 1, 1, IntToStr(LineCount));
       inc(LineCount);
@@ -1070,7 +1202,7 @@ begin
     end;
     LineCount := 0;
     LinePos := 0;
-    while LinePos < Height do
+    while LinePos < self.Height do
     begin
       TextOut(1, LinePos + 1, IntToStr(LineCount));
       inc(LineCount);
@@ -1089,8 +1221,8 @@ var
 begin
   with ACanvas.PdfCanvas do
   begin
-    PageHeight := Height;
-    PageWidth := Width;
+    PageHeight := self.Height;
+    PageWidth := self.Width;
   end;
   if Assigned(FPrintPageEvent) then
     FPrintPageEvent(Self, ACanvas);
@@ -1184,16 +1316,16 @@ begin
   with Canvas do
   begin
     Brush.Color := clWhite;
-    FillRect(Rect(0,0,Width,Height));
+    FillRect(Rect(0,0,self.Width,self.Height));
     TmpRect := GetAbsoluteRect;
-    PaintGrid(Canvas, Width, Height, TmpRect.Left, TmpRect.Top);
+    PaintGrid(Canvas, Self.Width-1, Self.Height-1, TmpRect.Left, TmpRect.Top);
     TextOut(2, 2, Name);
     Pen.Color := clGreen;
     Pen.Style := psDot;
     MoveTo(0,0);
-    LineTo(Width-1,0);
-    LineTo(Width-1,Height-1);
-    LineTo(0,Height-1);
+    LineTo(self.Width-1,0);
+    LineTo(self.Width-1,self.Height-1);
+    LineTo(0,self.Height-1);
     LineTo(0,0);
   end;
 end;
@@ -1301,15 +1433,28 @@ end;
 procedure TPRGridPanel.SetColCount(Value: integer);
 var
   Rect: TRect;
+
+  procedure raiseex;
+  begin
+    raise Exception.Create('invalid colcount');
+  end;
+
 begin
   if Value <> FColCount then
   begin
-    if (Value < 1) or ((Width div Value) < MIN_PANEL_SIZE) then
-      raise Exception.Create('invalid colcount');
+    if (Value < 1) then
+      raiseex;
+
     FColCount := Value;
-    Rect := GetClientRect;
-    AlignControls(nil, Rect);
-    Invalidate;
+
+    if HandleAllocated then begin
+      if ((Width div Value) < MIN_PANEL_SIZE) then
+        raiseex;
+
+      Rect := GetClientRect;
+      AlignControls(nil, Rect);
+      Invalidate;
+    end;
   end;
 end;
 
@@ -1317,15 +1462,29 @@ end;
 procedure TPRGridPanel.SetRowCount(Value: integer);
 var
   Rect: TRect;
+
+  procedure raiseex;
+  begin
+    raise Exception.CreateFmt('invalid rowcount=%d',[Value]);
+  end;
+
 begin
   if Value <> FRowCount then
   begin
-    if (Value < 1) or ((Height div Value) < MIN_PANEL_SIZE) then
-      raise Exception.Create('invalid rowcount');
+    if (Value < 1) then
+      raiseex;
+
     FRowCount := Value;
-    Rect := GetClientRect;
-    AlignControls(nil, Rect);
-    Invalidate;
+
+    if handleallocated then begin
+      if ((Height div Value) < MIN_PANEL_SIZE) then
+        raiseex;
+
+      Rect := GetClientRect;
+      AlignControls(nil, Rect);
+      Invalidate;
+    end;
+
   end;
 end;
 
@@ -1343,31 +1502,31 @@ begin
       Brush.Color := PROTECT_AREA_COLOR;
       FillRect(GetClientRect);
     end;
-    TmpWidth := Trunc(Width / FColCount);
-    TmpHeight := Trunc(Height / FRowCount);
+    TmpWidth := Trunc(self.Width / FColCount);
+    TmpHeight := Trunc(self.Height / FRowCount);
     Brush.Color := clWhite;
     FillRect(Rect(0,0,TmpWidth,TmpHeight));
     TmpRect := GetAbsoluteRect;
-    PaintGrid(Canvas, Width, Height, TmpRect.Left, TmpRect.Top);
+    PaintGrid(Canvas, self.Width, self.Height, TmpRect.Left, TmpRect.Top);
 
     // draw ruled line
     Pen.Color := clBlue;
     Pen.Style := psDot;
     for i := 0 to FRowCount do
     begin
-      TmpHeight := Trunc(Height*i/FRowCount);
-      if TmpHeight = Height then
+      TmpHeight := Trunc(Self.Height*i/FRowCount);
+      if TmpHeight = self.Height then
         dec(TmpHeight);
       MoveTo(0,TmpHeight);
-      LineTo(Width,TmpHeight);
+      LineTo(self.Width,TmpHeight);
     end;
     for i := 0 to FColCount do
     begin
-      TmpWidth := Trunc(Width*i/FColCount);
-      if TmpWidth = Width then
+      TmpWidth := Trunc(self.Width*i/FColCount);
+      if TmpWidth = self.Width then
         dec(TmpWidth);
       MoveTo(TmpWidth,0);
-      LineTo(TmpWidth,Height);
+      LineTo(TmpWidth,self.Height);
     end;
 
     FChildPanel.Repaint;
@@ -1541,12 +1700,36 @@ begin
 end;
 
 // CMTextChanged
+{$IFDEF LAZ_POWERPDF}
+procedure TPRCustomLabel.CMTextChanged(var Message: TLMessage);
+{$ELSE}
 procedure TPRCustomLabel.CMTextChanged(var Message: TMessage);
+{$ENDIF}
 begin
   Invalidate;
 end;
 
 // InternalTextout
+{$IFDEF LAZ_POWERPDF}
+function TPRCustomLabel.InternalTextout(APdfCanvas: TPdfCanvas;
+                       S: string; X, Y: integer): Single;
+var
+  Pos: Double;
+  i: integer;
+  Word: string;
+begin
+  Pos := X;
+  for i:=1 to UTF8Length(S) do begin
+    Word := UTF8Copy(s, i, 1);
+    Canvas.TextOut(Round(Pos), Y, Word);
+    with APdfCanvas do
+      Pos := Pos + TextWidth(Word) + Attribute.CharSpace;
+    if Word=' ' then
+      Pos := Pos + FWordSpace
+  end;
+  result := Pos;
+end;
+{$ELSE}
 function TPRCustomLabel.InternalTextout(APdfCanvas: TPdfCanvas;
                        S: string; X, Y: integer): Single;
 var
@@ -1583,6 +1766,7 @@ begin
   end;
   result := Pos;
 end;
+{$ENDIF}
 
 // GetFontClassName
 function TPRCustomLabel.GetFontClassName: string;
@@ -1645,8 +1829,8 @@ begin
     tmpWidth := PdfCanvas.TextWidth(FText);
 
     case FAlignment of
-      taCenter: XPos := Round((Width - tmpWidth) / 2);
-      taRightJustify: XPos :=Width - Round(tmpWidth);
+      taCenter: XPos := Round((Self.Width - tmpWidth) / 2);
+      taRightJustify: XPos :=Self.Width - Round(tmpWidth);
     else
       XPos := 0;
     end;
@@ -1661,7 +1845,11 @@ begin
 
   SetCanvasProperties(ACanvas.PdfCanvas);
 
-  ACanvas.TextRect(ARect, Caption, FAlignment, Clipping);
+  // Only one line of text rotated for now. It's the begining
+  if Angle=90 then
+    ACanvas.PdfCanvas.TextOutRotatedUp(ARect.Left + FontSize,  GetPage.Height - ARect.Top, Caption)
+  else
+    ACanvas.TextRect(ARect, Caption, FAlignment, Clipping);
 end;
 
 function TPRLabel.GetTextWidth: Single;
@@ -1691,7 +1879,7 @@ begin
       tmpWidth := TextWidth(Caption);
       CharCount := _GetCharCount(Caption);
       if CharCount > 1 then
-        tmpCharSpace := (Width - tmpWidth) / (CharCount - 1)
+        tmpCharSpace := (self.Width - tmpWidth) / (CharCount - 1)
       else
         tmpCharSpace := 0;
       if tmpCharSpace > 0 then
@@ -1726,7 +1914,7 @@ end;
 // GetText
 function TPRText.GetText: string;
 begin
-  result := Trim(FLines.Text);
+  result := TrimRight(FLines.Text);
 end;
 
 // Create
@@ -1765,9 +1953,9 @@ var
       Pen.Color := clNavy;
       Pen.Style := psDot;
       MoveTo(0, 0);
-      LineTo(Width-1, 0);
-      LineTo(Width-1, Height-1);
-      LineTo(0, Height-1);
+      LineTo(self.Width-1, 0);
+      LineTo(self.Width-1, self.Height-1);
+      LineTo(0, self.Height-1);
       LineTo(0, 0);
     end;
   end;
@@ -1846,7 +2034,11 @@ begin
     SetCharSpace(CharSpace);
     SetWordSpace(WordSpace);
     SetLeading(Leading);
-
+    Attribute.FontUnderline:=FontUnderline;
+    // Only one line of text rotated for now. It's the begining
+    if Angle=90 then
+      TextOutRotatedUp(Left + FontSize,  GetPage.Height- Top, Text)
+    else
     with ARect do
       MultilineTextRect(_PdfRect(Left, GetPage.Height- Top, Right, GetPage.Height- Bottom),
         Text, WordWrap);
@@ -1859,6 +2051,19 @@ begin
   if (Value <> FCharSpace) then
   begin
     FCharSpace := Value;
+    Invalidate;
+  end;
+end;
+
+procedure TPRCustomLabel.SetFontUnderline(const Value: boolean);
+begin
+  if FFontUnderLine <> Value then
+  begin
+    FFontUnderLine := Value;
+    if Value then
+      Font.Style := Font.Style + [fsUnderline]
+    else
+      Font.Style := Font.Style - [fsUnderline];
     Invalidate;
   end;
 end;
@@ -1926,6 +2131,44 @@ begin
   end;
 end;
 
+procedure TPRShape.StdFillOrStroke(ACanvas: TPdfCanvas);
+begin
+  with ACanvas do
+  begin
+    if (FillColor <> clNone) and IsFillable then
+      SetRGBFillColor(FFillColor);
+
+    if LineColor <> clNone then
+    begin
+      SetRGBStrokeColor(FLineColor);
+      SetLineWidth(FLineWidth);
+    end;
+
+    if FillColor <> clNone then
+      if IsFillable then
+        if (LineColor <> clNone) and (LineStyle <> psClear) then
+          ClosepathFillStroke
+        else
+        begin
+          Closepath;
+          Fill;
+        end
+      else
+      begin
+        Stroke;
+        Newpath;
+      end
+    else
+      if IsFillable then
+        ClosePathStroke
+      else
+      begin
+        Stroke;
+        Newpath;
+      end;
+  end;
+end;
+
 // SetFillColor
 procedure TPRShape.SetFillColor(Value: TColor);
 begin
@@ -1960,27 +2203,66 @@ begin
     end;
 end;
 
+function TPRShape.IsFillable: boolean;
+begin
+  result := (self.Width > 1) and (self.Height > 1);
+end;
+
 
 { TPRRect }
+
+function TPRRect.GetRadius: single;
+begin
+  if ClientHeight<ClientWidth then
+    Result := ClientHeight
+  else
+    Result := ClientWidth;
+
+  if FRadius<0.0 then
+    Result := Result/8  // min(w,h)/4 is default diamter
+  else
+    Result := FRadius;
+end;
+
+procedure TPRRect.SetCorners(AValue: TPdfCorners);
+begin
+  if FCorners=AValue then Exit;
+  FCorners:=AValue;
+  Invalidate;
+end;
+
+procedure TPRRect.SetRadius(const AValue: single);
+begin
+  if AValue<>FRadius then begin
+    FRadius := AValue;
+    if FRadius<0.0 then
+      FRadius := -1.0;
+    Invalidate;
+  end;
+end;
 
 // Paint
 procedure TPRRect.Paint;
 var
   ARect: TRect;
+  ARadius: Integer;
 begin
   ARect := ClientRect;
-  with ARect, Canvas do
+  with Canvas, ARect do
   begin
-    if Self.Height > 1 then
+    if self.Height > 1 then
       Bottom := Bottom - 1;
-    if Width > 1 then
+    if self.Width > 1 then
       Right := Right - 1;
+
+    ARadius := round(Radius);
 
     if FillColor <> clNone then
     begin
       Brush.Color := FFillColor;
       Brush.Style := bsSolid;
-      FillRect(ARect);
+      if ARadius=0 then
+        FillRect(ARect);
     end
     else
       Brush.Style := bsClear;
@@ -1990,9 +2272,14 @@ begin
       Pen.Style := FLineStyle;
       Pen.Width := Round(FLineWidth);
       Pen.Color := FLineColor;
-      Polygon([Point(Left,Top), Point(Right,Top),
-        Point(Right,Bottom), Point(Left,Bottom)]);
+      if ARadius=0 then
+        Polygon([Point(Left,Top), Point(Right,Top),
+          Point(Right,Bottom), Point(Left,Bottom)]);
     end;
+
+    if ARadius<>0 then
+      MixedRoundRect(Canvas, Left,Top,Right,Bottom,ARadius*2,ARadius*2,
+                     SquaredCorners);
   end;
 end;
 
@@ -2000,67 +2287,50 @@ end;
 procedure TPRRect.Print(ACanvas: TPRCanvas; ARect: TRect);
 var
   PageHeight: integer;
-  pCanvas: TPdfCanvas;
+  ARadius: single;
 begin
   PageHeight := GetPage.Height;
-  ARect.Top := PageHeight - ARect.Top;
-  if Height > 1 then
-    ARect.Bottom := PageHeight - ARect.Bottom + 1
-  else
-    ARect.Bottom := PageHeight - ARect.Bottom;
-  if ARect.Width > 1 then
-    ARect.Right := ARect.Right - 1;
-
-  if (Height <= 1) and (ARect.Width <= 1) then Exit;
-
-  if (LineColor = clNone) or (LineStyle = psClear) then
-    if (Height <= 1) or (ARect.Width <= 1) then Exit;
-
-  SetDash(ACanvas.PdfCanvas, FLineStyle);
-
-  pCanvas := ACanvas.PdfCanvas;
-  pCanvas.MoveTo(ARect.Left, ARect.Top);
-
-  if ARect.Width > 1 then
+  with ARect do
   begin
-    pCanvas.LineTo(ARect.Right, ARect.Top);
+    Top := PageHeight - Top;
     if Height > 1 then
-      pCanvas.LineTo(ARect.Right, ARect.Bottom);
-  end;
-  if Height > 1 then
-    pCanvas.LineTo(ARect.Left, ARect.Bottom);
+      Bottom := PageHeight - Bottom + 1
+    else
+      Bottom := PageHeight - Bottom;
+    if Width > 1 then
+      Right := Right - 1;
 
-  if (FillColor <> clNone) and (ARect.Width > 1) and (Height > 1) then
-    pCanvas.SetRGBFillColor(FFillColor);
+    if (Height <= 1) and (Width <= 1) then Exit;
 
-  if LineColor <> clNone then
-  begin
-    pCanvas.SetRGBStrokeColor(FLineColor);
-    pCanvas.SetLineWidth(FLineWidth);
-  end;
+    if (LineColor = clNone) or (LineStyle = psClear) then
+      if (Height <= 1) or (Width <= 1) then Exit;
 
-  if FillColor <> clNone then
-    if (ARect.Width > 1) and (Height > 1) then
-      if (LineColor <> clNone) and (LineStyle <> psClear) then
-        pCanvas.ClosepathFillStroke
+    SetDash(ACanvas.PdfCanvas, FLineStyle);
+
+    ARadius := Radius;
+
+    with ACanvas.PdfCanvas do
+    begin
+      if ARadius<>0.0 then
+        RoundRect(Left, Bottom, Right-Left, Top-Bottom, ARadius, ARadius,
+          SquaredCorners)
       else
       begin
-        pCanvas.Closepath;
-        pCanvas.Fill;
-      end
-    else
-    begin
-      pCanvas.Stroke;
-      pCanvas.Newpath;
-    end
-  else
-    if (ARect.Width > 1) and (Height > 1) then
-      pCanvas.ClosePathStroke
-    else
-    begin
-      pCanvas.Stroke;
-      pCanvas.Newpath;
+        MoveTo(Left, Top);
+
+        if self.Width > 1 then
+        begin
+          LineTo(Right, Top);
+          if self.Height > 1 then
+            LineTo(Right, Bottom);
+        end;
+        if self.Height > 1 then
+          LineTo(Left, Bottom);
+      end;
     end;
+
+    StdFillOrStroke(ACanvas.PDFCanvas);
+  end;
 end;
 
 { TPREllipse }
@@ -2073,9 +2343,9 @@ begin
   ARect := ClientRect;
   with ARect, Canvas do
   begin
-    if Self.Height > 1 then
+    if self.Height > 1 then
       Bottom := Bottom - 1;
-    if Width > 1 then
+    if self.Width > 1 then
       Right := Right - 1;
 
     if FillColor <> clNone then
@@ -2108,17 +2378,17 @@ begin
   with ARect do
   begin
     Top := PageHeight - Top;
-    if Self.Height > 1 then
+    if Height > 1 then
       Bottom := PageHeight - Bottom + 1
     else
       Bottom := PageHeight - Bottom;
     if Width > 1 then
       Right := Right - 1;
 
-    if (Self.Height <= 1) and (Width <= 1) then Exit;
+    if (Height <= 1) and (Width <= 1) then Exit;
 
     if (LineColor = clNone) or (LineStyle = psClear) then
-      if (Self.Height <= 1) or (Width <= 1) then Exit;
+      if (Height <= 1) or (Width <= 1) then Exit;
 
     SetDash(ACanvas.PdfCanvas, FLineStyle);
 
@@ -2127,37 +2397,7 @@ begin
       with ARect do
         Ellipse(Left, Top, Right - Left, Bottom - Top);
 
-      if (FillColor <> clNone) and (Width > 1) and (Self.Height > 1) then
-        SetRGBFillColor(FFillColor);
-
-      if LineColor <> clNone then
-      begin
-        SetRGBStrokeColor(FLineColor);
-        SetLineWidth(FLineWidth);
-      end;
-
-      if FillColor <> clNone then
-        if (Width > 1) and (Self.Height > 1) then
-          if (LineColor <> clNone) and (LineStyle <> psClear) then
-            ClosepathFillStroke
-          else
-          begin
-            Closepath;
-            Fill;
-          end
-        else
-        begin
-          Stroke;
-          Newpath;
-        end
-      else
-        if (Width > 1) and (Self.Height > 1) then
-          ClosePathStroke
-        else
-        begin
-          Stroke;
-          Newpath;
-        end;
+      StdFillOrStroke(ACanvas.PdfCanvas);
     end;
   end;
 end;
@@ -2166,6 +2406,10 @@ end;
 
 // Paint
 procedure TPRImage.Paint;
+var
+  R: TRect;
+  AWidth,AHeight: Integer;
+  RatioH,RatioW: Double;
 begin
   if (FPicture = nil) or (FPicture.Graphic = nil) or
    (FPicture.Graphic.Empty) then
@@ -2175,12 +2419,23 @@ begin
       TextOut(4, 4, Name);
       Pen.Color := clBlue;
       Pen.Style := psDot;
-      Polygon([Point(0, 0), Point(Width-1, 0),
-        Point(Width-1, Self.Height-1), Point(0, Self.Height-1)]);
+      Polygon([Point(0, 0), Point(self.Width-1, 0),
+        Point(self.Width-1, self.Height-1), Point(0, self.Height-1)]);
     end
   else
   if FStretch then
-    Canvas.StretchDraw(GetClientRect, FPicture.Graphic)
+  begin
+    R := GetClientRect;
+
+    AWidth := R.Right-R.Left;
+    AHeight := R.Bottom-R.Top;
+    if FProportional then
+      CalcProportionalBounds(AWidth, AHeight);
+    R.Right := R.Left + AWidth;
+    R.Bottom := R.Top + AHeight;
+
+    Canvas.StretchDraw(R, FPicture.Graphic)
+  end
   else
     Canvas.Draw(0, 0, FPicture.Graphic);
 end;
@@ -2192,16 +2447,20 @@ var
   FXObjectName: string;
   i: integer;
   FIdx: integer;
+  AWidth,AHeight: Integer;
+  WidthF,HeightF: Single;
 begin
   if (FPicture = nil) or (FPicture.Graphic = nil) or
-   (FPicture.Graphic.Empty) or not (FPicture.Graphic is TBitmap) then
+   (FPicture.Graphic.Empty) {or not (FPicture.Graphic is TFPImageBitmap)} then
     Exit;
   FDoc := ACanvas.PdfCanvas.Doc;
   if SharedImage then
   begin
     FXObjectName := Self.Name;
+    if FXObjectName='' then
+      FXObjectName := FSharedName;
     if FDoc.GetXObject(FXObjectName) = nil then
-      FDoc.AddXObject(FXObjectName, CreatePdfImage(FPicture.Graphic, 'Pdf-Bitmap'));
+      FDoc.AddXObject(FXObjectName, CreatePdfImage(FPicture.Graphic, 'Pdf-Bitmap', FDoc.ObjectMgr));
   end
   else
   begin
@@ -2216,15 +2475,36 @@ begin
       if FIdx >= MAX_IMAGE_NUMBER then
         FIdx := 0;
     end;
-    FDoc.AddXObject(FXObjectName, CreatePdfImage(FPicture.Graphic, 'Pdf-Bitmap'));
+    FDoc.AddXObject(FXObjectName, CreatePdfImage(FPicture.Graphic, 'Pdf-Bitmap', FDoc.ObjectMgr));
   end;
   with ARect, ACanvas.PdfCanvas do
-    if FStretch then
-      DrawXObject(Left, GetPage.Height - Bottom, Width, Self.Height, FXObjectName)
-    else
-      DrawXObjectEx(Left, GetPage.Height - Top - FPicture.Height,
-            FPicture.Width, FPicture.Height,
-            Left, GetPage.Height - Top - Self.Height, Width, Self.Height, FXObjectName);
+    if FStretch then begin
+      AWidth := Width;
+      AHeight := Height;
+      if FProportional then
+        CalcProportionalBounds(AWidth, AHeight);
+      DrawXObject(Left, GetPage.Height - Top - AHeight, AWidth, AHeight, FXObjectName)
+    end
+    else begin
+      WidthF := FPicture.Width * ScaleX;
+      HeightF := FPicture.Height * ScaleY;
+      DrawXObjectEx(Left, GetPage.Height - Top - HeightF, WidthF, HeightF,
+            Left, GetPage.Height - Top - Height, Width, Height, FXObjectName);
+    end;
+end;
+
+procedure TPRImage.CalcProportionalBounds(var AWidth, AHeight: Integer);
+var
+  RatioW,RatioH: Double;
+begin
+  if (FPicture.Height<>0) and (FPicture.Width<>0) then begin
+    RatioW := AWidth/FPicture.Width;
+    RatioH := AHeight/FPicture.Height;
+    if RatioH<RatioW then
+      RatioW := RatioH;
+    AWidth := Round(RatioW * FPicture.Width);
+    AHeight := Round(RatioW * FPicture.Height);
+  end;
 end;
 
 // Create
@@ -2234,6 +2514,8 @@ begin
   FPicture := TPicture.Create;
   FSharedImage := true;
   FStretch := true;
+  FScaleX := 1.0;
+  FScaleY := 1.0;
   Randomize;
 end;
 
@@ -2255,6 +2537,31 @@ begin
   if Value = FStretch then Exit;
   FStretch := Value;
   Invalidate;
+end;
+
+function TPRImage.GetScaleX: Single;
+begin
+  if FScaleX<=0 then
+    result := 1.0
+  else
+    result := FScaleX;
+end;
+
+function TPRImage.GetScaleY: Single;
+begin
+  if FScaleY<=0 then
+    result := 1.0
+  else
+    result := FScaleY;
+end;
+
+procedure TPRImage.SetProportional(AValue: boolean);
+begin
+  if AValue <> FProportional then
+  begin
+    FProportional := AValue;
+    Invalidate;
+  end;
 end;
 
 // Destroy
@@ -2402,6 +2709,42 @@ begin
   inherited Create;
   FData := ADoc.OutlineRoot;
   ADoc.OutlineRoot.Reference := Self;
+end;
+
+{ TPRPolygon }
+
+procedure TPRPolygon.Print(prCanvas: TPRCanvas; ARect: TRect);
+var
+  ACanvas: TPDFCanvas;
+  i,h: Integer;
+  Pts: TPRPointArray;
+begin
+  if Length(Points)<2 then
+    exit;
+
+  h := GetPage.Height;
+
+  SetLength(Pts, Length(Points));
+  for i:=0 to Length(Points)-1 do
+  begin
+    Pts[i].x := Points[i].x;
+    Pts[i].y := h - Points[i].y;
+  end;
+
+  ACanvas := prCanvas.PDFCanvas;
+
+  SetDash(ACanvas, FLineStyle);
+
+  ACanvas.MoveTo(Pts[0].x, Pts[0].y);
+  for i:=1 to Length(Pts)-1 do
+    ACanvas.LineTo(Pts[i].x, Pts[i].y);
+
+  StdFillOrStroke(ACanvas);
+end;
+
+function TPRPolygon.IsFillable: boolean;
+begin
+  result := (Length(Points)>2);
 end;
 
 end.

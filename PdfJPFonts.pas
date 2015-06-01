@@ -21,7 +21,10 @@
  * Create 2001.04.14
  *
  *}
-unit PdfJpFonts;
+{$IFDEF LAZ_POWERPDF}
+{$H+}
+{$ENDIF}
+unit PdfJPFonts;
 
 interface
 
@@ -220,7 +223,7 @@ type
   TPdfType0Font = class(TPdfFont)
   private
     FCharToCMap: TCharToCMap;
-    FArray: TList;
+    FArray: TFpList;
     FDW: Word;
     FMissingWidth: Word;
   protected
@@ -229,7 +232,7 @@ type
     destructor Destroy; override;
     procedure SetData(AData: TPdfDictionary); override;
     procedure SetCharToCMap(AFunc: TCharToCMap); virtual;
-    function GetCharWidth(AText: string; APos: integer): integer; override;
+    function GetCharWidth(const AText: string; APos: integer): integer; override;
   end;
 
   TPdfJpFont = class(TPdfType0Font)
@@ -238,14 +241,14 @@ type
     procedure AddDescendantFontItem(ADescendantFont: TPdfDictionary); virtual;
     function GetFontName: string; virtual;
   public
-    constructor Create(AXref: TPdfXref; AName: string); override;
+    constructor Create(AXref: TPdfXref; const AName: string); override;
   end;
 
   TPdfJpFixedFont = class(TPdfJpFont)
   protected
     procedure AddDescendantFontItem(ADescendantFont: TPdfDictionary); override;
   public
-    constructor Create(AXref: TPdfXref; AName: string); override;
+    constructor Create(AXref: TPdfXref; const AName: string); override;
   end;
 
   TPdfGothic = class(TPdfJpFixedFont)
@@ -298,7 +301,7 @@ type
 
   TPdfJpProportionalFont = class(TPdfJpFont)
   public
-    constructor Create(AXref: TPdfXref; AName: string); override;
+    constructor Create(AXref: TPdfXref; const AName: string); override;
   end;
 
   TPdfPGothic = class(TPdfJpProportionalFont)
@@ -377,7 +380,7 @@ begin
   FDW := DescendantFont.PdfNumberByName('DW').Value;
   Discriptor := DescendantFont.PdfDictionaryByName('FontDescriptor');
   FMissingWidth := Discriptor.PdfNumberByName('MissingWidth').Value;
-  FArray := TList.Create;
+  FArray := TFpList.Create;
   WidthsRoot := DescendantFont.PdfArrayByName('W');
 
   // create widths array from "W"attribute.
@@ -448,7 +451,7 @@ begin
 end;
 
 // GetCharWidth
-function TPdfType0Font.GetCharWidth(AText: string; APos: integer): integer;
+function TPdfType0Font.GetCharWidth(const AText: string; APos: integer): integer;
 var
   CID: integer;
 begin
@@ -503,7 +506,7 @@ begin
 end;
 
 // Create
-constructor TPdfJpFont.Create(AXref: TPdfXref; AName: string);
+constructor TPdfJpFont.Create(AXref: TPdfXref; const AName: string);
 var
   FFontDescriptor: TPdfDictionary;
   FFont: TPdfDictionary;
@@ -567,7 +570,7 @@ begin
   ADescendantFont.AddItem('W', FWidths);
 end;
 
-constructor TPdfJpFixedFont.Create(AXref: TPdfXref; AName: string);
+constructor TPdfJpFixedFont.Create(AXref: TPdfXref; const AName: string);
 begin
   inherited Create(AXref, AName);
   AddStrElements(Data, TYPE0_JP_FONT_STR_TABLE);
@@ -762,7 +765,7 @@ end;
 { TPdfJpProportionalFont }
 
 // Create
-constructor TPdfJpProportionalFont.Create(AXref: TPdfXref; AName: string);
+constructor TPdfJpProportionalFont.Create(AXref: TPdfXref; const AName: string);
 begin
   inherited Create(AXref, AName);
   AddStrElements(Data, TYPE0_JPP_FONT_STR_TABLE);
@@ -1027,6 +1030,24 @@ end;
 
 initialization
 
+  {$IFDEF LAZ_POWERPDF}
+  PdfLazRegisterClassAlias(TPdfGothic, 'Gothic');
+  PdfLazRegisterClassAlias(TPdfGothicBold, 'Gothic,Bold');
+  PdfLazRegisterClassAlias(TPdfGothicItalic, 'Gothic,Italic');
+  PdfLazRegisterClassAlias(TPdfGothicBoldItalic, 'Gothic,BoldItalic');
+  PdfLazRegisterClassAlias(TPdfMincyo, 'Mincyo');
+  PdfLazRegisterClassAlias(TPdfMincyoBold, 'Mincyo,Bold');
+  PdfLazRegisterClassAlias(TPdfMincyoItalic, 'Mincyo,Italic');
+  PdfLazRegisterClassAlias(TPdfMincyoBoldItalic, 'Mincyo,BoldItalic');
+  PdfLazRegisterClassAlias(TPdfPGothic, 'PGothic');
+  PdfLazRegisterClassAlias(TPdfPGothicBold, 'PGothic,Bold');
+  PdfLazRegisterClassAlias(TPdfPGothicItalic, 'PGothic,Italic');
+  PdfLazRegisterClassAlias(TPdfPGothicBoldItalic, 'PGothic,BoldItalic');
+  PdfLazRegisterClassAlias(TPdfPMincyo, 'PMincyo');
+  PdfLazRegisterClassAlias(TPdfPMincyoBold, 'PMincyo,Bold');
+  PdfLazRegisterClassAlias(TPdfPMincyoItalic, 'PMincyo,Italic');
+  PdfLazRegisterClassAlias(TPdfPMincyoBoldItalic, 'PMincyo,BoldItalic');
+  {$ELSE}
   RegisterClassAlias(TPdfGothic, 'Gothic');
   RegisterClassAlias(TPdfGothicBold, 'Gothic,Bold');
   RegisterClassAlias(TPdfGothicItalic, 'Gothic,Italic');
@@ -1043,6 +1064,7 @@ initialization
   RegisterClassAlias(TPdfPMincyoBold, 'PMincyo,Bold');
   RegisterClassAlias(TPdfPMincyoItalic, 'PMincyo,Italic');
   RegisterClassAlias(TPdfPMincyoBoldItalic, 'PMincyo,BoldItalic');
+  {$ENDIF}
 
 finalization
 

@@ -21,6 +21,9 @@
  * Create 2000.09.14
  *
  *}
+{$IFDEF LAZ_POWERPDF}
+{$H+}
+{$ENDIF}
 unit PdfFonts;
 
 interface
@@ -487,6 +490,9 @@ const
   SCRIPT_BBOX: array[0..3] of Integer = (-184,-363,505,758);
 
 type
+
+  { TPdfType1Font }
+
   TPdfType1Font = class(TPdfFont)
   private
     FFirstChar: Byte;
@@ -494,78 +500,78 @@ type
     FArray: array[0..255] of Word;
   public
     procedure SetData(Value: TPdfDictionary); override;
-    function GetCharWidth(AText: string; APos: integer): integer; override;
+    function GetCharWidth(const AText: string; APos: integer): integer; override;
   end;
 
   TPdfFixedWidth = class(TPdfType1Font)
   public
-    constructor Create(AXref: TPdfXref; AName: string); override;
+    constructor Create(AXref: TPdfXref; const AName: string); override;
   end;
 
   TPdfFixedWidthBold = class(TPdfType1Font)
   public
-    constructor Create(AXref: TPdfXref; AName: string); override;
+    constructor Create(AXref: TPdfXref; const AName: string); override;
   end;
 
   TPdfFixedWidthItalic = class(TPdfType1Font)
   public
-    constructor Create(AXref: TPdfXref; AName: string); override;
+    constructor Create(AXref: TPdfXref; const AName: string); override;
   end;
 
   TPdfFixedWidthBoldItalic = class(TPdfType1Font)
   public
-    constructor Create(AXref: TPdfXref; AName: string); override;
+    constructor Create(AXref: TPdfXref; const AName: string); override;
   end;
 
   TPdfArial = class(TPdfType1Font)
   public
-    constructor Create(AXref: TPdfXref; AName: string); override;
+    constructor Create(AXref: TPdfXref; const AName: string); override;
   end;
 
   TPdfArialBold = class(TPdfType1Font)
   public
-    constructor Create(AXref: TPdfXref; AName: string); override;
+    constructor Create(AXref: TPdfXref; const AName: string); override;
   end;
 
   TPdfArialItalic = class(TPdfType1Font)
   public
-    constructor Create(AXref: TPdfXref; AName: string); override;
+    constructor Create(AXref: TPdfXref; const AName: string); override;
   end;
 
   TPdfArialBoldItalic = class(TPdfType1Font)
   public
-    constructor Create(AXref: TPdfXref; AName: string); override;
+    constructor Create(AXref: TPdfXref; const AName: string); override;
   end;
 
   TPdfTimesRoman = class(TPdfType1Font)
   public
-    constructor Create(AXref: TPdfXref; AName: string); override;
+    constructor Create(AXref: TPdfXref; const AName: string); override;
   end;
 
   TPdfTimesBold = class(TPdfType1Font)
   public
-    constructor Create(AXref: TPdfXref; AName: string); override;
+    constructor Create(AXref: TPdfXref; const AName: string); override;
   end;
 
   TPdfTimesItalic = class(TPdfType1Font)
   public
-    constructor Create(AXref: TPdfXref; AName: string); override;
+    constructor Create(AXref: TPdfXref; const AName: string); override;
   end;
 
   TPdfTimesBoldItalic = class(TPdfType1Font)
   public
-    constructor Create(AXref: TPdfXref; AName: string); override;
+    constructor Create(AXref: TPdfXref; const AName: string); override;
   end;
 
   TPdfScript = class(TPdfType1Font)
   public
-    constructor Create(AXref: TPdfXref; AName: string); override;
+    constructor Create(AXref: TPdfXref; const AName: string); override;
   end;
 
 implementation
 
 { TPdfType1Font }
-function TPdfType1Font.GetCharWidth(AText: string; APos: integer): integer;
+function TPdfType1Font.GetCharWidth(const AText: string; APos: integer): integer;
 begin
   result := FArray[ord(AText[APos])];
 end;
@@ -575,6 +581,7 @@ var
   i: integer;
   DefaultWidth: Word;
   Widths: TPdfArray;
+  ANumber: TPdfNumber;
 begin
   inherited SetData(Value);
 
@@ -597,7 +604,7 @@ begin
 end;
 
 { FixedWidth }
-constructor TPdfFixedWidth.Create(AXref: TPdfXref; AName: string);
+constructor TPdfFixedWidth.Create(AXref: TPdfXref; const AName: string);
 var
   FWidths: TPdfArray;
   FFont: TPdfDictionary;
@@ -621,7 +628,7 @@ begin
 end;
 
 { FixedWidthBold }
-constructor TPdfFixedWidthBold.Create(AXref: TPdfXref; AName: string);
+constructor TPdfFixedWidthBold.Create(AXref: TPdfXref; const AName: string);
 var
   FWidths: TPdfArray;
   FFont: TPdfDictionary;
@@ -641,7 +648,7 @@ begin
 end;
 
 { FixedWidthItalic }
-constructor TPdfFixedWidthItalic.Create(AXref: TPdfXref; AName: string);
+constructor TPdfFixedWidthItalic.Create(AXref: TPdfXref; const AName: string);
 var
   FWidths: TPdfArray;
   FFont: TPdfDictionary;
@@ -661,7 +668,7 @@ begin
 end;
 
 { FixedWidthBoldItalic }
-constructor TPdfFixedWidthBoldItalic.Create(AXref: TPdfXref; AName: string);
+constructor TPdfFixedWidthBoldItalic.Create(AXref: TPdfXref; const AName: string);
 var
   FWidths: TPdfArray;
   FFont: TPdfDictionary;
@@ -681,7 +688,7 @@ begin
 end;
 
 { Arial }
-constructor TPdfArial.Create(AXref: TPdfXref; AName: string);
+constructor TPdfArial.Create(AXref: TPdfXref; const AName: string);
 var
   FWidths: TPdfArray;
   FFont: TPdfDictionary;
@@ -697,11 +704,13 @@ begin
   FWidths := TPdfArray.CreateNumArray(AXref, ARIAL_W_ARRAY);
   FFont.AddInternalItem('Widths', FWidths);
 
+  UnderlinePosition := -151;
+
   SetData(FFont);
 end;
 
 { Arial-Bold }
-constructor TPdfArialBold.Create(AXref: TPdfXref; AName: string);
+constructor TPdfArialBold.Create(AXref: TPdfXref; const AName: string);
 var
   FWidths: TPdfArray;
   FFont: TPdfDictionary;
@@ -717,11 +726,14 @@ begin
   FWidths := TPdfArray.CreateNumArray(AXref, ARIAL_BOLD_W_ARRAY);
   FFont.AddInternalItem('Widths', FWidths);
 
+  UnderlinePosition := -155;
+  UnderlineThickness := 69;
+
   SetData(FFont);
 end;
 
 { Arial-Italic }
-constructor TPdfArialItalic.Create(AXref: TPdfXref; AName: string);
+constructor TPdfArialItalic.Create(AXref: TPdfXref; const AName: string);
 var
   FWidths: TPdfArray;
   FFont: TPdfDictionary;
@@ -737,11 +749,13 @@ begin
   FWidths := TPdfArray.CreateNumArray(AXref, ARIAL_ITALIC_W_ARRAY);
   FFont.AddInternalItem('Widths', FWidths);
 
+  UnderlinePosition := -151;
+
   SetData(FFont);
 end;
 
 { Arial-BoldItalic }
-constructor TPdfArialBoldItalic.Create(AXref: TPdfXref; AName: string);
+constructor TPdfArialBoldItalic.Create(AXref: TPdfXref; const AName: string);
 var
   FWidths: TPdfArray;
   FFont: TPdfDictionary;
@@ -757,11 +771,14 @@ begin
   FWidths := TPdfArray.CreateNumArray(AXref, ARIAL_BOLDITALIC_W_ARRAY);
   FFont.AddInternalItem('Widths', FWidths);
 
+  UnderlinePosition := -111;
+  UnderlineThickness := 69;
+
   SetData(FFont);
 end;
 
 { TPdfTimesRoman }
-constructor TPdfTimesRoman.Create(AXref: TPdfXref; AName: string);
+constructor TPdfTimesRoman.Create(AXref: TPdfXref; const AName: string);
 var
   FWidths: TPdfArray;
   FFont: TPdfDictionary;
@@ -781,7 +798,7 @@ begin
 end;
 
 { TPdfTimesBold }
-constructor TPdfTimesBold.Create(AXref: TPdfXref; AName: string);
+constructor TPdfTimesBold.Create(AXref: TPdfXref; const AName: string);
 var
   FWidths: TPdfArray;
   FFont: TPdfDictionary;
@@ -801,7 +818,7 @@ begin
 end;
 
 { TPdfTimesItalic }
-constructor TPdfTimesItalic.Create(AXref: TPdfXref; AName: string);
+constructor TPdfTimesItalic.Create(AXref: TPdfXref; const AName: string);
 var
   FWidths: TPdfArray;
   FFont: TPdfDictionary;
@@ -821,7 +838,7 @@ begin
 end;
 
 { TPdfTimesBoldItalic }
-constructor TPdfTimesBoldItalic.Create(AXref: TPdfXref; AName: string);
+constructor TPdfTimesBoldItalic.Create(AXref: TPdfXref; const AName: string);
 var
   FWidths: TPdfArray;
   FFont: TPdfDictionary;
@@ -841,7 +858,7 @@ begin
 end;
 
 { TPdfScript }
-constructor TPdfScript.Create(AXref: TPdfXref; AName: string);
+constructor TPdfScript.Create(AXref: TPdfXref; const AName: string);
 var
   FWidths: TPdfArray;
   FFontDescriptor: TPdfDictionary;
@@ -872,6 +889,22 @@ end;
 
 initialization
 
+  {$IFDEF LAZ_POWERPDF}
+  PdfLazRegisterClassAlias(TPdfFixedWidth, 'FixedWidth');
+  PdfLazRegisterClassAlias(TPdfFixedWidthBold, 'FixedWidth-Bold');
+  PdfLazRegisterClassAlias(TPdfFixedWidthBoldItalic, 'FixedWidth-BoldItalic');
+  PdfLazRegisterClassAlias(TPdfFixedWidthItalic, 'FixedWidth-Italic');
+  PdfLazRegisterClassAlias(TPdfArial, 'Arial');
+  PdfLazRegisterClassAlias(TPdfArialBold, 'Arial-Bold');
+  PdfLazRegisterClassAlias(TPdfArialBoldItalic, 'Arial-BoldItalic');
+  PdfLazRegisterClassAlias(TPdfArialItalic, 'Arial-Italic');
+  PdfLazRegisterClassAlias(TPdfTimesRoman, 'Times-Roman');
+  PdfLazRegisterClassAlias(TPdfTimesBold, 'Times-Bold');
+  PdfLazRegisterClassAlias(TPdfTimesItalic, 'Times-Italic');
+  PdfLazRegisterClassAlias(TPdfTimesBoldItalic, 'Times-BoldItalic');
+//  PdfLazRegisterClassAlias(TPdfScript, 'Script');
+//  PdfLazRegisterClassAlias(TPdfSymbol, 'Symbol');
+  {$ELSE}
   RegisterClassAlias(TPdfFixedWidth, 'FixedWidth');
   RegisterClassAlias(TPdfFixedWidthBold, 'FixedWidth-Bold');
   RegisterClassAlias(TPdfFixedWidthBoldItalic, 'FixedWidth-BoldItalic');
@@ -886,6 +919,7 @@ initialization
   RegisterClassAlias(TPdfTimesBoldItalic, 'Times-BoldItalic');
 //  RegisterClassAlias(TPdfScript, 'Script');
 //  RegisterClassAlias(TPdfSymbol, 'Symbol');
+  {$ENDIF}
 
 finalization
 

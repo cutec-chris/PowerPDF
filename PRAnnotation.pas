@@ -20,12 +20,20 @@
  * 2001.08.12 Changed the implementation of annotation.
  *
  *}
+{$IFDEF LAZ_POWERPDF}
+{$H+}
+{$ENDIF}
 unit PRAnnotation;
 
 interface
 
 uses
-  Windows, Messages, SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
+  {$ifdef LAZ_POWERPDF}
+  LCLIntf, LCLType, LMessages,
+  {$ELSE}
+  Windows, Messages,
+  {$endif}
+  SysUtils, Classes, Graphics, Controls, Forms, Dialogs,
   PReport, PdfDoc, PdfFonts, PdfTypes;
 
 type
@@ -38,7 +46,11 @@ type
     function GetText: string;
     function GetLines: TStrings;
   protected
+    {$IFDEF LAZ_POWERPDF}
+    procedure CMTextChanged(var Message: TLMessage); message CM_TEXTCHANGED;
+    {$ELSE}
     procedure CMTextChanged(var Message: TMessage); message CM_TEXTCHANGED;
+    {$ENDIF}
     procedure Paint; override;
     procedure Print(ACanvas: TPRCanvas; ARect: TRect); override;
   public
@@ -95,7 +107,11 @@ begin
 end;
 
 // CMTextChanged
+{$IFDEF LAZ_POWERPDF}
+procedure TPRAnnotation.CMTextChanged(var Message: TLMessage);
+{$ELSE}
 procedure TPRAnnotation.CMTextChanged(var Message: TMessage);
+{$ENDIF}
 begin
   Invalidate;
 end;
@@ -116,15 +132,15 @@ begin
     Brush.Color := clWindow;
     Font.Size := 10;
     Font.Style := [];
-    Rectangle(0, PDF_ANNOT_TITLE_HEIGHT, Width, Height);
+    Rectangle(0, PDF_ANNOT_TITLE_HEIGHT, self.Width-1, self.Height-1);
     DrawText(Handle, PChar(Text), -1, TmpRect, DT_WORDBREAK);
 
     Brush.Color := clYellow;
-    Rectangle(0, 0, Width, PDF_ANNOT_TITLE_HEIGHT + 1);
+    Rectangle(0, 0, self.Width-1, PDF_ANNOT_TITLE_HEIGHT + 1);
     Font.Size := 8;
     Font.Style := [fsBold];
     W := TextWidth(Caption);
-    TextOut((Width - W) div 2, 4, Caption);
+    TextOut((self.Width - W) div 2, 4, Caption);
   end;
 end;
 

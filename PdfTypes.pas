@@ -25,23 +25,25 @@
  * 2001.08.19 small changes in TPdfDictiinary and TPdfArray.
  * 2001.09.01 changed some definations and methods to work with kylix.
  *}
+{$IFDEF LAZ_POWERPDF}
+{$MODE OBJFPC}{$H+}
+{$ENDIF}
 unit PdfTypes;
-
-{$I PowerPDFVersion.inc}
 
 interface
 
 // if use "FlateDecode" compression, comment out the next line.
 // (this unit and PdfDoc.pas)
-{$DEFINE NOZLIB}
+//{$DEFINE NOZLIB}
 
 uses
   SysUtils, Classes
-{$IFNDEF LINUX}
+{$IFNDEF UNIX}
   , Windows
 {$ENDIF}
 {$IFNDEF NOZLIB}
-  ,Zlib;
+  ,ZStream
+  ,PasZlib;
 {$ELSE}
   ;
 {$ENDIF}
@@ -75,6 +77,8 @@ type
   TPdfRect = record
     Left, Top, Right, Bottom: Single;
   end;
+
+  TPdfCorners = set of (pcTopLeft, pcBottomLeft, pcBottomRight, pcTopRight);
 
   TPdfObjectType = (otDirectObject, otIndirectObject, otVirtualObject);
   TPdfAlignment = (paLeftJustify, paRightJustify, paCenter);
@@ -156,7 +160,7 @@ type
    protected
     procedure InternalWriteStream(const AStream: TStream); override;
   public
-    constructor CreateString(AValue: string);
+    constructor CreateString(const AValue: string);
     property Value: string read FValue write FValue;
   end;
 
@@ -166,7 +170,7 @@ type
   protected
     procedure InternalWriteStream(const AStream: TStream); override;
   public
-    constructor CreateText(AValue: string);
+    constructor CreateText(const AValue: string);
     property Value: String read FValue write FValue;
   end;
 
@@ -183,7 +187,7 @@ type
 
   TPdfArray = class(TPdfObject)
   private
-    FArray: TList;
+    FArray: TFpList;
     FObjectMgr: TPdfObjectMgr;
     function GetItems(Index: integer): TPdfObject;
     function GetItemCount: integer;
@@ -194,8 +198,8 @@ type
     constructor CreateNumArray(AObjectMgr: TPdfObjectMgr; AArray: array of Integer);
     destructor Destroy; override;
     procedure AddItem(AItem: TPdfObject);
-    function FindName(AName: string): TPdfName;
-    function RemoveName(AName: string): boolean;
+    function FindName(const AName: string): TPdfName;
+    function RemoveName(const AName: string): boolean;
     property Items[Index: integer]: TPdfObject read GetItems;
     property ItemCount: integer read GetItemCount;
     property ObjectMgr: TPdfObjectMgr read FObjectMgr;
@@ -208,8 +212,8 @@ type
     FIsInternal: boolean;
     function GetKey: string;
   public
-    constructor Create(AKey: string; AValue: TPdfObject);
-    constructor CreateAsInternal(AKey: string; AValue: TPdfObject; AVoid: Pointer);
+    constructor Create(const AKey: string; AValue: TPdfObject);
+    constructor CreateAsInternal(const AKey: string; AValue: TPdfObject; AVoid: Pointer);
     destructor Destroy; override;
     property Key: string read GetKey;
     property Value: TPdfObject read FValue;
@@ -218,7 +222,7 @@ type
 
   TPdfDictionary = class(TPdfObject)
   private
-    FArray: TList;
+    FArray: TFpList;
     FObjectMgr: TPdfObjectMgr;
     function GetItems(Index: integer): TPdfDictionaryElement;
     function GetItemCount: integer;
@@ -227,20 +231,20 @@ type
   public
     constructor CreateDictionary(AObjectMgr: TPdfObjectMgr);
     destructor Destroy; override;
-    function ValueByName(AKey: string): TPdfObject;
-    function PdfBooleanByName(AKey: string): TPdfBoolean;
-    function PdfNumberByName(AKey: string): TPdfNumber;
-    function PdfTextByName(AKey: string): TPdfText;
-    function PdfRealByName(AKey: string): TPdfReal;
-    function PdfStringByName(AKey: string): TPdfString;
-    function PdfNameByName(AKey: string): TPdfName;
-    function PdfDictionaryByName(AKey: string): TPdfDictionary;
-    function PdfArrayByName(AKey: string): TPdfArray;
-    procedure AddItem(AKey: string; AValue: TPdfObject);
-    procedure AddNumberItem(AKey: string; AValue: Integer);
-    procedure AddNameItem(AKey: string; AValue: string);
-    procedure AddInternalItem(AKey: string; AValue: TPdfObject);
-    procedure RemoveItem(AKey: string);
+    function ValueByName(const AKey: string): TPdfObject;
+    function PdfBooleanByName(const AKey: string): TPdfBoolean;
+    function PdfNumberByName(const AKey: string): TPdfNumber;
+    function PdfTextByName(const AKey: string): TPdfText;
+    function PdfRealByName(const AKey: string): TPdfReal;
+    function PdfStringByName(const AKey: string): TPdfString;
+    function PdfNameByName(const AKey: string): TPdfName;
+    function PdfDictionaryByName(const AKey: string): TPdfDictionary;
+    function PdfArrayByName(const AKey: string): TPdfArray;
+    procedure AddItem(const AKey: string; AValue: TPdfObject);
+    procedure AddNumberItem(const AKey: string; AValue: Integer);
+    procedure AddNameItem(const AKey: string; AValue: string);
+    procedure AddInternalItem(const AKey: string; AValue: TPdfObject);
+    procedure RemoveItem(const AKey: string);
     property Items[Index: integer]: TPdfDictionaryElement read GetItems;
     property ItemCount: integer read GetItemCount;
     property ObjectMgr: TPdfObjectMgr read FObjectMgr;
@@ -294,12 +298,21 @@ type
   function _FloatToStrR(Value: Extended): string;
   function _GetUnicodeHeader: string;
   function _PdfRect(Left, Top, Right, Bottom: Single): TPdfRect;
-  function _GetCharCount(Text: string): integer;
+  function _GetCharCount(const Text: string): integer;
+
+{$IFDEF LAZ_POWERPDF}
+  function _UTF8StrToUnicodeHex(const Value:string): string;
+  function _UTF8ToWinAnsi(const value:string; InvalidChar:char='?'): string;
+  procedure PdfLazRegisterClassAlias(aClass: TPersistentClass; const Alias: string);
+  function  PdfLazFindClass(const aClassName: string):TPersistentClass;
+{$ENDIF}
 
 implementation
 
-uses
-  Types;
+{$IFDEF LAZ_POWERPDF}
+var
+  AliasList: TStringList;
+{$ENDIF}
 
 {TPdfObject}
 
@@ -457,7 +470,7 @@ begin
 end;
 
 // CreateString
-constructor TPdfString.CreateString(AValue: string);
+constructor TPdfString.CreateString(const AValue: string);
 begin
   Create;
   Value := AValue;
@@ -480,7 +493,7 @@ begin
 end;
 
 // CreateText
-constructor TPdfText.CreateText(AValue: string);
+constructor TPdfText.CreateText(const AValue: string);
 begin
   Create;
   Value := AValue;
@@ -499,7 +512,7 @@ begin
   result := '';
   for i := 1 to Length(Value) do
   begin
-    if CharInSet(Value[i], EscapeChars) or
+    if (Value[i] in EscapeChars) or
       (#33 > Value[i]) or
       (#126 < Value[i]) then
       result := result + '#'+ IntToHex(Ord(Value[i]), 02)
@@ -562,7 +575,7 @@ end;
 constructor TPdfArray.CreateArray(AObjectMgr: TPdfObjectMgr);
 begin
   inherited Create;
-  FArray := TList.Create;
+  FArray := TFpList.Create;
   FObjectMgr := AObjectMgr;
 end;
 
@@ -572,7 +585,7 @@ var
   i: integer;
 begin
   inherited Create;
-  FArray := TList.Create;
+  FArray := TFpList.Create;
   FObjectMgr := AObjectMgr;
 
   for i := 0 to High(AArray) do
@@ -608,7 +621,7 @@ begin
 end;
 
 // FindName
-function TPdfArray.FindName(AName: string): TPdfName;
+function TPdfArray.FindName(const AName: string): TPdfName;
 var
   i: integer;
   FPdfName: TPdfName;
@@ -628,7 +641,7 @@ begin
 end;
 
 // RemoveName
-function TPdfArray.RemoveName(AName: string): boolean;
+function TPdfArray.RemoveName(const AName: string): boolean;
 var
   AObject: TPdfObject;
 begin
@@ -652,7 +665,7 @@ begin
 end;
 
 // Create
-constructor TPdfDictionaryElement.Create(AKey: string; AValue: TPdfObject);
+constructor TPdfDictionaryElement.Create(const AKey: string; AValue: TPdfObject);
 begin
   FKey := TPdfName.Create;
   FKey.Value := AKey;
@@ -663,7 +676,7 @@ begin
 end;
 
 // CreateAsInternal
-constructor TPdfDictionaryElement.CreateAsInternal(AKey: string; AValue: TPdfObject; AVoid: Pointer);
+constructor TPdfDictionaryElement.CreateAsInternal(const AKey: string; AValue: TPdfObject; AVoid: Pointer);
 begin
   Create(AKey, AValue);
   FIsInternal := true;
@@ -716,7 +729,7 @@ end;
 constructor TPdfDictionary.CreateDictionary(AObjectMgr: TPdfObjectMgr);
 begin
   inherited Create;
-  FArray := TList.Create;
+  FArray := TFpList.Create;
   FObjectMgr := AObjectMgr;
 end;
 
@@ -738,7 +751,7 @@ begin
 end;
 
 // ValueByName
-function TPdfDictionary.ValueByName(AKey: string): TPdfObject;
+function TPdfDictionary.ValueByName(const AKey: string): TPdfObject;
 var
   i: integer;
   FElement: TPdfDictionaryElement;
@@ -761,55 +774,55 @@ begin
 end;
 
 // PdfNumberByName
-function TPdfDictionary.PdfNumberByName(AKey: string): TPdfNumber;
+function TPdfDictionary.PdfNumberByName(const AKey: string): TPdfNumber;
 begin
   result := TPdfNumber(ValueByName(AKey));
 end;
 
 // PdfTextByName
-function TPdfDictionary.PdfTextByName(AKey: string): TPdfText;
+function TPdfDictionary.PdfTextByName(const AKey: string): TPdfText;
 begin
   result := TPdfText(ValueByName(AKey));
 end;
 
 // PdfRealByName
-function TPdfDictionary.PdfRealByName(AKey: string): TPdfReal;
+function TPdfDictionary.PdfRealByName(const AKey: string): TPdfReal;
 begin
   result := TPdfReal(ValueByName(AKey));
 end;
 
 // PdfStringByName
-function TPdfDictionary.PdfStringByName(AKey: string): TPdfString;
+function TPdfDictionary.PdfStringByName(const AKey: string): TPdfString;
 begin
   result := TPdfString(ValueByName(AKey));
 end;
 
 // PdfNameByName
-function TPdfDictionary.PdfNameByName(AKey: string): TPdfName;
+function TPdfDictionary.PdfNameByName(const AKey: string): TPdfName;
 begin
   result := TPdfName(ValueByName(AKey));
 end;
 
 // PdfDictionaryByName
-function TPdfDictionary.PdfDictionaryByName(AKey: string): TPdfDictionary;
+function TPdfDictionary.PdfDictionaryByName(const AKey: string): TPdfDictionary;
 begin
   result := TPdfDictionary(ValueByName(AKey));
 end;
 
 // PdfArrayByName
-function TPdfDictionary.PdfArrayByName(AKey: string): TPdfArray;
+function TPdfDictionary.PdfArrayByName(const AKey: string): TPdfArray;
 begin
   result := TPdfArray(ValueByName(AKey));
 end;
 
 // PdfBooleanByName
-function TPdfDictionary.PdfBooleanByName(AKey: string): TPdfBoolean;
+function TPdfDictionary.PdfBooleanByName(const AKey: string): TPdfBoolean;
 begin
   result := TPdfBoolean(ValueByName(AKey));
 end;
 
 // AddItem
-procedure TPdfDictionary.AddItem(AKey: string; AValue: TPdfObject);
+procedure TPdfDictionary.AddItem(const AKey: string; AValue: TPdfObject);
 var
   FItem: TPdfDictionaryElement;
   FTmpObject: TPdfVirtualObject;
@@ -828,19 +841,19 @@ begin
 end;
 
 // AddNumberItem
-procedure TPdfDictionary.AddNumberItem(AKey: string; AValue: Integer);
+procedure TPdfDictionary.AddNumberItem(const AKey: string; AValue: Integer);
 begin
   AddItem(AKey, TPdfNumber.CreateNumber(AValue));
 end;
 
 // AddNameItem
-procedure TPdfDictionary.AddNameItem(AKey: string; AValue: string);
+procedure TPdfDictionary.AddNameItem(const AKey: string; AValue: string);
 begin
   AddItem(AKey, TPdfName.CreateName(AValue));
 end;
 
 // AddInternalItem
-procedure TPdfDictionary.AddInternalItem(AKey: string; AValue: TPdfObject);
+procedure TPdfDictionary.AddInternalItem(const AKey: string; AValue: TPdfObject);
 var
   FItem: TPdfDictionaryElement;
   FTmpObject: TPdfVirtualObject;
@@ -859,7 +872,7 @@ begin
 end;
 
 // RemoveItem
-procedure TPdfDictionary.RemoveItem(AKey: string);
+procedure TPdfDictionary.RemoveItem(const AKey: string);
 var
   i: integer;
   FElement: TPdfDictionaryElement;
@@ -904,10 +917,7 @@ begin
   else
 {$ENDIF}
     TmpStream.CopyFrom(FStream, 0);
-
-  //Cause I ansified _WriteString there are only AnsiChars in the Stream
   FLength.Value := TmpStream.Size;
-//  FLength.Value := TmpStream.Size div SizeOf(Char);
 
   FAttributes.WriteToStream(AStream);
   _WriteString(#13#10'stream'#13#10, AStream);
@@ -992,23 +1002,18 @@ var
   i: integer;
 begin
   result := '';
-{$IFNDEF UNICODE}
-  {$IFNDEF LINUX}
+  {$IFNDEF UNIX}
   Len := MultiByteToWideChar(0, CP_ACP,
-    PAnsiChar(Value), Length(Value), nil, 0);
+    PChar(Value), Length(Value), nil, 0);
   GetMem(PW, Len * 2);
   Len := MultiByteToWideChar(0, CP_ACP,
-    PAnsiChar(Value), Length(Value), PW, Len * 2);
+    PChar(Value), Length(Value), PW, Len * 2);
   {$ELSE}
   Len := Length(Value);
   GetMem(PW, Len * 2);
   StringToWideChar(Value, PW, Len * 2);
   Len := Length(PWideChar(PW)^);
   {$ENDIF}
-{$ELSE}
-  Pw := Pointer(PChar(Value));
-  Len := Length(Value);
-{$ENDIF}
   PByte := Pw;
   i := 0;
   while i < Len do
@@ -1020,9 +1025,7 @@ begin
     result := result + IntToHex(HiByte, 2) + IntToHex(LoByte, 2);
     inc(i);
   end;
-{$IFNDEF UNICODE}
   FreeMem(PW);
-{$ENDIF}
 end;
 
 // _StrToHex
@@ -1049,6 +1052,45 @@ begin
     end;
 end;
 
+//type
+//  TConvFunc=function(const W:Word): char;
+
+function CP1252(const W: Word; const InvalidChar: Char): Char;
+begin
+  case W of
+    $00..$7F,$A0..$FF: result := char(W);
+    $20AC: result := #$80;
+    $201A: result := #$82;
+    $0192: result := #$83;
+    $201E: result := #$84;
+    $2026: result := #$85;
+    $2020: result := #$86;
+    $2021: result := #$87;
+    $02C6: result := #$88;
+    $2030: result := #$89;
+    $0160: result := #$8A;
+    $2039: result := #$8B;
+    $0152: result := #$8C;
+    $017D: result := #$8E;
+    $2018: result := #$91;
+    $2019: result := #$92;
+    $201C: result := #$93;
+    $201D: result := #$94;
+    $2022: result := #$95;
+    $2013: result := #$96;
+    $2014: result := #$97;
+    $02DC: result := #$98;
+    $2122: result := #$99;
+    $0161: result := #$9A;
+    $203A: result := #$9B;
+    $0153: result := #$9C;
+    $017E: result := #$9E;
+    $0178: result := #$9F;
+  else
+    result:=InvalidChar;
+  end;
+end;
+
 // _EscapeText
 function _EscapeText(const Value: string): string;
 const
@@ -1057,14 +1099,23 @@ const
 var
   i, j: integer;
   flg: boolean;
+  S: string;
 begin
   //  If text contains chars to need escape, replace text using "\".
+  //
+  // TODO: implement UNICODE support in powerpdf. Currently we can't do
+  // any better than converting utf-8 strings to unicode.
   result := '';
-  for i := 1 to Length(Value) do
+  {$IFDEF LAZ_POWERPDF}
+  S := _UTF8ToWinAnsi(Value);
+  {$ELSE}
+  S := Value;
+  {$ENDIF}
+  for i := 1 to Length(S) do
   begin
     flg := false;
     for j := 1 to Length(EscapeChars) do
-      if Value[i] = EscapeChars[j] then
+      if S[i] = EscapeChars[j] then
       begin
         result := result + '\' + ReplaceChars[j];
         flg := true;
@@ -1072,7 +1123,7 @@ begin
       end;
 
     if not flg then
-       result := result + Value[i];
+       result := result + S[i];
   end;
 end;
 
@@ -1091,28 +1142,21 @@ end;
 
 // _WriteString
 procedure _WriteString(const Value: string; AStream: TStream);
-var
-  sAnsi: AnsiString;
 begin
-  //The stream should be ansified
-  sAnsi := AnsiString(Value);
-  AStream.Write(PAnsiChar(sAnsi)^, Length(sAnsi));
-//  AStream.Write(PChar(Value)^, Length(Value) * SizeOf(Char));
+  AStream.Write(PChar(Value)^, Length(Value));
 end;
 
 // _FloatToStrR
 function _FloatToStrR(Value: Extended): string;
 var
   i: integer;
-  chDecimal: Char;
 begin
-  chDecimal := FormatSettings.DecimalSeparator;
   result := FloatToStr(Trunc(Value * 100 + 0.5) / 100);
   // Convert ','(Comma) to '.'(period)
   // -- for the area whose decimal parametor is ','
-  if chDecimal <> '.' then
+  if DecimalSeparator <> '.' then
   begin
-    i := Pos(chDecimal, result);
+    i := Pos(DecimalSeparator, result);
     if i > 0 then
       result[i] := '.';
   end;
@@ -1134,7 +1178,7 @@ begin
 end;
 
 // _GetCharCount
-function _GetCharCount(Text: string): integer;
+function _GetCharCount(const Text: string): integer;
 var
   i: integer;
 begin
@@ -1144,5 +1188,62 @@ begin
       (ByteType(Text, i) = mbLeadByte) then
       inc(result);
 end;
+
+{$IFDEF LAZ_POWERPDF}
+
+function _UTF8StrToUnicodeHex(const Value: string): string;
+var
+  W: Widestring;
+  i: Integer;
+begin
+  result := '';
+  W := UTF8Decode(Value);
+  for i:=1 to Length(W) do begin
+    Result := Result + IntTohex(Word(W[i]), 4);
+  end;
+end;
+
+function _UTF8ToWinAnsi(const value: string; InvalidChar:char='?'): string;
+var
+  W: widestring;
+  i: Integer;
+begin
+  W := UTF8Decode(Value);
+  result := '';
+  for i:=1 to length(w) do
+    result := result + CP1252(word(w[i]), InvalidChar);
+end;
+
+procedure PdfLazRegisterClassAlias(aClass: TPersistentClass; const Alias: string);
+begin
+  Classes.RegisterClass(aClass);
+  if AliasList=nil then
+    AliasList := TStringList.Create;
+  AliasList.AddObject(Alias, TObject(aClass));
+end;
+
+function PdfLazFindClass(const aClassName: String): TPersistentClass;
+var
+  i: Integer;
+begin
+  result := Classes.GetClass(aClassName);
+  if Result=nil then begin
+    i := AliasList.IndexOf(aClassName);
+    if i>=0 then
+      Result := TPersistentClass(AliasList.Objects[i]);
+  end;
+  if not Assigned(Result) then
+    raise EClassNotFound.CreateFmt('No class was found', [aClassName]);
+end;
+
+initialization
+  AliasList := nil;
+
+finalization
+  if AliasList<>nil then
+    AliasList.Free;
+  AliasList:=nil;
+{$ENDIF}
+
 
 end.

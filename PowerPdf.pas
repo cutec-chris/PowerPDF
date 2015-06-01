@@ -24,7 +24,11 @@ unit PowerPdf;
 interface
 
 uses
-  Classes, PReport, PRJpegImage, PRAnnotation;
+  Classes, PReport, PRJpegImage, PRAnnotation
+  {$IFDEF LAZ_POWERPDF}
+  ,LResources
+  {$ENDIF}
+  ;
 
 procedure Register;
 
@@ -48,4 +52,8 @@ begin
                                  ]);
 end;
 
+initialization
+{$ifdef fpc}
+ {$I PowerPdf.lrs}
+{$endif}
 end.

@@ -21,7 +21,9 @@
  * Create 2001.04.14
  *
  *}
-
+{$IFDEF LAZ_POWERPDF}
+{$H+}
+{$ENDIF}
 unit PdfGBFonts;
 
 interface
@@ -63,14 +65,14 @@ type
     procedure AddDescendantFontItem(ADescendantFont: TPdfDictionary); virtual;
     function GetFontName: string; virtual;
   public
-    constructor Create(AXref: TPdfXref; AName: string); override;
+    constructor Create(AXref: TPdfXref; const AName: string); override;
   end;
 
   TPdfGBFixedFont = class(TPdfGBFont)
   protected
     procedure AddDescendantFontItem(ADescendantFont: TPdfDictionary); override;
   public
-    constructor Create(AXref: TPdfXref; AName: string); override;
+    constructor Create(AXref: TPdfXref; const AName: string); override;
   end;
 
   TPdfChinese = class(TPdfGBFixedFont)
@@ -113,7 +115,7 @@ begin
 end;
 
 // Create
-constructor TPdfGBFont.Create(AXref: TPdfXref; AName: string);
+constructor TPdfGBFont.Create(AXref: TPdfXref; const AName: string);
 var
   FFontDescriptor: TPdfDictionary;
   FFont: TPdfDictionary;
@@ -177,7 +179,7 @@ begin
   ADescendantFont.AddItem('W', FWidths);
 end;
 
-constructor TPdfGBFixedFont.Create(AXref: TPdfXref; AName: string);
+constructor TPdfGBFixedFont.Create(AXref: TPdfXref; const AName: string);
 begin
   inherited Create(AXref, AName);
   AddStrElements(Data, TYPE0_GB_FONT_STR_TABLE);
@@ -206,7 +208,11 @@ end;
 
 initialization
 
+  {$IFDEF LAZ_POWERPDF}
+  PdfLazRegisterClassAlias(TPdfChinese, 'Chinese');
+  {$ELSE}
   RegisterClassAlias(TPdfChinese, 'Chinese');
+  {$ENDIF}
 
   finalization
 
