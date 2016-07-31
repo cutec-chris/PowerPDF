@@ -47,7 +47,7 @@ interface
 
 uses
   {$IFDEF LAZ_POWERPDF}
-  LCLType, LMessages, LCLIntf, GraphType, FPCanvas, LCLProc,
+  LCLType, LMessages, LCLIntf, GraphType, FPCanvas, LazUTF8, LCLProc,
   {$ELSE}
   Windows, Messages,
   {$ENDIF}
@@ -764,9 +764,9 @@ var
   procedure Corner(Ax,Ay,Bx,By,Cx,Cy:Integer);
   begin
     ReallocMem(Pts, SizeOf(TPoint)*(c+3));
-//    Pts[c].x:=ax; Pts[c].y:=ay; inc(c);
-//    Pts[c].x:=bx; Pts[c].y:=by; inc(c);
-//    Pts[c].x:=cx; Pts[c].y:=cy; inc(c);
+    Pts[c].x:=ax; Pts[c].y:=ay; inc(c);
+    Pts[c].x:=bx; Pts[c].y:=by; inc(c);
+    Pts[c].x:=cx; Pts[c].y:=cy; inc(c);
   end;
 
 begin
@@ -1722,10 +1722,11 @@ begin
   for i:=1 to UTF8Length(S) do begin
     Word := UTF8Copy(s, i, 1);
     Canvas.TextOut(Round(Pos), Y, Word);
-    with APdfCanvas do
+    with APdfCanvas do begin
       Pos := Pos + TextWidth(Word) + Attribute.CharSpace;
-    if Word=' ' then
-      Pos := Pos + FWordSpace
+      if Word=' ' then
+        Pos := Pos + Attribute.WordSpace;
+    end;
   end;
   result := Pos;
 end;
@@ -1866,6 +1867,9 @@ var
   tmpWidth: Single;
   tmpCharSpace: Single;
   CharCount: integer;
+  {$IFDEF LAZ_POWERPDF}
+  str: string;
+  {$ENDIF}
 begin
   // setting canvas attribute to the internal doc(to get font infomation).
   with ACanvas do
@@ -1876,6 +1880,15 @@ begin
     if AlignJustified then
     begin
       SetCharSpace(0);
+      {$IFDEF LAZ_POWERPDF}
+      str := UTF8Trim(Caption, [u8tKeepStart]);
+      tmpWidth := TextWidth(str);
+      CharCount := _GetSpcCount(str);
+      if CharCount>0 then begin
+        tmpCharSpace := (Self.Width - tmpWidth) / CharCount;
+        SetWordSpace(tmpCharSpace);
+      end;
+      {$ELSE}
       tmpWidth := TextWidth(Caption);
       CharCount := _GetCharCount(Caption);
       if CharCount > 1 then
@@ -1884,6 +1897,7 @@ begin
         tmpCharSpace := 0;
       if tmpCharSpace > 0 then
         SetCharSpace(tmpCharSpace);
+      {$ENDIF}
     end
     else
       SetCharSpace(CharSpace);
@@ -2293,17 +2307,17 @@ begin
   with ARect do
   begin
     Top := PageHeight - Top;
-    if Height > 1 then
+    if self.Height > 1 then
       Bottom := PageHeight - Bottom + 1
     else
       Bottom := PageHeight - Bottom;
-    if Width > 1 then
+    if self.Width > 1 then
       Right := Right - 1;
 
-    if (Height <= 1) and (Width <= 1) then Exit;
+    if (self.Height <= 1) and (self.Width <= 1) then Exit;
 
     if (LineColor = clNone) or (LineStyle = psClear) then
-      if (Height <= 1) or (Width <= 1) then Exit;
+      if (self.Height <= 1) or (self.Width <= 1) then Exit;
 
     SetDash(ACanvas.PdfCanvas, FLineStyle);
 
@@ -2378,17 +2392,17 @@ begin
   with ARect do
   begin
     Top := PageHeight - Top;
-    if Height > 1 then
+    if self.Height > 1 then
       Bottom := PageHeight - Bottom + 1
     else
       Bottom := PageHeight - Bottom;
-    if Width > 1 then
+    if self.Width > 1 then
       Right := Right - 1;
 
-    if (Height <= 1) and (Width <= 1) then Exit;
+    if (self.Height <= 1) and (self.Width <= 1) then Exit;
 
     if (LineColor = clNone) or (LineStyle = psClear) then
-      if (Height <= 1) or (Width <= 1) then Exit;
+      if (self.Height <= 1) or (self.Width <= 1) then Exit;
 
     SetDash(ACanvas.PdfCanvas, FLineStyle);
 
@@ -2479,8 +2493,8 @@ begin
   end;
   with ARect, ACanvas.PdfCanvas do
     if FStretch then begin
-      AWidth := Width;
-      AHeight := Height;
+      AWidth := self.Width;
+      AHeight := self.Height;
       if FProportional then
         CalcProportionalBounds(AWidth, AHeight);
       DrawXObject(Left, GetPage.Height - Top - AHeight, AWidth, AHeight, FXObjectName)
@@ -2489,7 +2503,7 @@ begin
       WidthF := FPicture.Width * ScaleX;
       HeightF := FPicture.Height * ScaleY;
       DrawXObjectEx(Left, GetPage.Height - Top - HeightF, WidthF, HeightF,
-            Left, GetPage.Height - Top - Height, Width, Height, FXObjectName);
+            Left, GetPage.Height - Top - self.Height, self.Width, self.Height, FXObjectName);
     end;
 end;
 
