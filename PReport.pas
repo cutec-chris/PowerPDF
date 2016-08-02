@@ -1817,7 +1817,7 @@ begin
 
   PdfCanvas := GetInternalDoc.Canvas;
 
-  // setting canvas attribute to the internal doc(to get font infomation).
+  // setting canvas attribute to the internal doc(to get font information).
   SetCanvasProperties(PdfCanvas);
 
   with Canvas do
@@ -1867,7 +1867,7 @@ var
   tmpCharSpace: Single;
   CharCount: integer;
 begin
-  // setting canvas attribute to the internal doc(to get font infomation).
+  // setting canvas attribute to the internal doc(to get font information).
   with ACanvas do
   begin
     SetFont(GetFontClassName, FontSize);
@@ -1964,7 +1964,7 @@ begin
   // this is useless way, but I don't think of more smart way.
   PdfCanvas := GetInternalDoc.Canvas;
 
-  // setting canvas attribute to the internal doc(to get font infomation).
+  // setting canvas attribute to the internal doc(to get font information).
   with PdfCanvas do
   begin
     SetFont(GetFontClassName, FontSize);
