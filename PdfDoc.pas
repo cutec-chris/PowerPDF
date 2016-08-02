@@ -44,10 +44,14 @@ interface
 
 // if use "FlateDecode" compression, comment out the next line.
 // (this unit and PdfTypes.pas)
-{$DEFINE NOZLIB}
+{.$DEFINE NOZLIB}
 
 uses
-  SysUtils, Classes, PdfTypes, Windows;
+  SysUtils, Classes, PdfTypes
+  {$IFDEF WINDOWS}
+  ,Windows
+  {$ENDIF}
+  ;
 
 const
   POWER_PDF_VERSION_TEXT = 'PowerPdf version 0.9';

@@ -59,20 +59,24 @@ const
 type
   TCharToCMap = function(S: string; Index: integer): integer;
 
+  { TPdfGBFont }
+
   TPdfGBFont = class(TPdfType0Font)
   protected
     procedure AddDescriptorItem(AFontDescriptor: TPdfDictionary); virtual;
     procedure AddDescendantFontItem(ADescendantFont: TPdfDictionary); virtual;
     function GetFontName: string; virtual;
   public
-    constructor Create(AXref: TPdfXref; const AName: string); override;
+    constructor Create(AXref: TPdfXref; AName: string); override;
   end;
+
+  { TPdfGBFixedFont }
 
   TPdfGBFixedFont = class(TPdfGBFont)
   protected
     procedure AddDescendantFontItem(ADescendantFont: TPdfDictionary); override;
   public
-    constructor Create(AXref: TPdfXref; const AName: string); override;
+    constructor Create(AXref: TPdfXref; AName: string); override;
   end;
 
   TPdfChinese = class(TPdfGBFixedFont)
@@ -115,7 +119,7 @@ begin
 end;
 
 // Create
-constructor TPdfGBFont.Create(AXref: TPdfXref; const AName: string);
+constructor TPdfGBFont.Create(AXref: TPdfXref; AName: string);
 var
   FFontDescriptor: TPdfDictionary;
   FFont: TPdfDictionary;
@@ -179,7 +183,7 @@ begin
   ADescendantFont.AddItem('W', FWidths);
 end;
 
-constructor TPdfGBFixedFont.Create(AXref: TPdfXref; const AName: string);
+constructor TPdfGBFixedFont.Create(AXref: TPdfXref; AName: string);
 begin
   inherited Create(AXref, AName);
   AddStrElements(Data, TYPE0_GB_FONT_STR_TABLE);
