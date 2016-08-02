@@ -1611,7 +1611,7 @@ var
   begin
     i := MeasureText(S, AWidth);
     {$IFDEF LAZ_POWERPDF}
-    S := UTF8Copy(S, 1, i);
+    S := Copy(S, 1, i);
     {$ELSE}
     S := Copy(S, 1, i);
     {$ENDIF}

@@ -1719,8 +1719,8 @@ var
   Word: string;
 begin
   Pos := X;
-  for i:=1 to UTF8Length(S) do begin
-    Word := UTF8Copy(s, i, 1);
+  for i:=1 to Length(S) do begin
+    Word := Copy(s, i, 1);
     Canvas.TextOut(Round(Pos), Y, Word);
     with APdfCanvas do
       Pos := Pos + TextWidth(Word) + Attribute.CharSpace;
