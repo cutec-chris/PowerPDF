@@ -1,7 +1,7 @@
 {*
  * << P o w e r P d f >> -- PdfJpFonts.pas
  *
- * << Japanese font set for Shift-JIS Characters >>
+ * << Japanese font set for Shift-JIS Charactors >>
  *
  * Copyright (c) 1999-1101 Takezou. <takeshi_kanno@est.hi-ho.ne.jp>
  *
@@ -220,8 +220,6 @@ type
     property Width: Word read FWidth write FWidth;
   end;
 
-  { TPdfType0Font }
-
   TPdfType0Font = class(TPdfFont)
   private
     FCharToCMap: TCharToCMap;
@@ -234,10 +232,8 @@ type
     destructor Destroy; override;
     procedure SetData(AData: TPdfDictionary); override;
     procedure SetCharToCMap(AFunc: TCharToCMap); virtual;
-    function GetCharWidth(AText: string; APos: integer): integer; override;
+    function GetCharWidth(const AText: string; APos: integer): integer; override;
   end;
-
-  { TPdfJpFont }
 
   TPdfJpFont = class(TPdfType0Font)
   protected
@@ -245,16 +241,14 @@ type
     procedure AddDescendantFontItem(ADescendantFont: TPdfDictionary); virtual;
     function GetFontName: string; virtual;
   public
-    constructor Create(AXref: TPdfXref; AName: string); override;
+    constructor Create(AXref: TPdfXref; const AName: string); override;
   end;
-
-  { TPdfJpFixedFont }
 
   TPdfJpFixedFont = class(TPdfJpFont)
   protected
     procedure AddDescendantFontItem(ADescendantFont: TPdfDictionary); override;
   public
-    constructor Create(AXref: TPdfXref; AName: string); override;
+    constructor Create(AXref: TPdfXref; const AName: string); override;
   end;
 
   TPdfGothic = class(TPdfJpFixedFont)
@@ -305,11 +299,9 @@ type
     function GetFontName: string; override;
   end;
 
-  { TPdfJpProportionalFont }
-
   TPdfJpProportionalFont = class(TPdfJpFont)
   public
-    constructor Create(AXref: TPdfXref; AName: string); override;
+    constructor Create(AXref: TPdfXref; const AName: string); override;
   end;
 
   TPdfPGothic = class(TPdfJpProportionalFont)
@@ -459,7 +451,7 @@ begin
 end;
 
 // GetCharWidth
-function TPdfType0Font.GetCharWidth(AText: string; APos: integer): integer;
+function TPdfType0Font.GetCharWidth(const AText: string; APos: integer): integer;
 var
   CID: integer;
 begin
@@ -514,7 +506,7 @@ begin
 end;
 
 // Create
-constructor TPdfJpFont.Create(AXref: TPdfXref; AName: string);
+constructor TPdfJpFont.Create(AXref: TPdfXref; const AName: string);
 var
   FFontDescriptor: TPdfDictionary;
   FFont: TPdfDictionary;
@@ -578,7 +570,7 @@ begin
   ADescendantFont.AddItem('W', FWidths);
 end;
 
-constructor TPdfJpFixedFont.Create(AXref: TPdfXref; AName: string);
+constructor TPdfJpFixedFont.Create(AXref: TPdfXref; const AName: string);
 begin
   inherited Create(AXref, AName);
   AddStrElements(Data, TYPE0_JP_FONT_STR_TABLE);
@@ -773,7 +765,7 @@ end;
 { TPdfJpProportionalFont }
 
 // Create
-constructor TPdfJpProportionalFont.Create(AXref: TPdfXref; AName: string);
+constructor TPdfJpProportionalFont.Create(AXref: TPdfXref; const AName: string);
 begin
   inherited Create(AXref, AName);
   AddStrElements(Data, TYPE0_JPP_FONT_STR_TABLE);

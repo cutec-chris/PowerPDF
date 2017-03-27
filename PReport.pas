@@ -47,7 +47,7 @@ interface
 
 uses
   {$IFDEF LAZ_POWERPDF}
-  LCLType, LMessages, LCLIntf, GraphType, FPCanvas, LCLProc,
+  LCLType, LMessages, LCLIntf, GraphType, FPCanvas, LazUTF8, LCLProc,
   {$ELSE}
   Windows, Messages,
   {$ENDIF}
@@ -428,18 +428,24 @@ type
   { TPRShape }
   TPRShape = class(TPRItem)
   private
+    FGradientDirection: TGradientDirection;
     FLineWidth: Single;
     FLineColor: TColor;
     FLineStyle: TPenStyle;
     FFillColor: TColor;
+    FGradientColor: TColor;
+    procedure SetGradientDirection(AValue: TGradientDirection);
     procedure SetLineColor(Value: TColor);
     procedure SetFillColor(Value: TColor);
     procedure SetLineWidth(Value: Single);
     procedure SetLineStyle(Value: TPenStyle);
+    procedure SetGradientColor(AValue: TColor);
     procedure StdFillOrStroke(ACanvas: TPdfCanvas);
   protected
     procedure SetDash(ACanvas: TPdfCAnvas; APattern: TPenStyle);
     function  IsFillable: boolean; virtual;
+    property GradientColor: TColor read FGradientColor write SetGradientColor default clNone;
+    property GradientDirection: TGradientDirection read FGradientDirection write SetGradientDirection default gdVertical;
   public
     constructor Create(AOwner: TComponent); override;
   published
@@ -462,6 +468,8 @@ type
     procedure Paint; override;
     procedure Print(ACanvas: TPRCanvas; ARect: TRect); override;
   published
+    property GradientColor;
+    property GradientDirection;
     property Radius: single read GetRadius write SetRadius;
     property SquaredCorners: TPdfCorners read FCorners write SetCorners default [];
   end;
@@ -764,9 +772,9 @@ var
   procedure Corner(Ax,Ay,Bx,By,Cx,Cy:Integer);
   begin
     ReallocMem(Pts, SizeOf(TPoint)*(c+3));
-//    Pts[c].x:=ax; Pts[c].y:=ay; inc(c);
-//    Pts[c].x:=bx; Pts[c].y:=by; inc(c);
-//    Pts[c].x:=cx; Pts[c].y:=cy; inc(c);
+    Pts[c].x:=ax; Pts[c].y:=ay; inc(c);
+    Pts[c].x:=bx; Pts[c].y:=by; inc(c);
+    Pts[c].x:=cx; Pts[c].y:=cy; inc(c);
   end;
 
 begin
@@ -1719,13 +1727,14 @@ var
   Word: string;
 begin
   Pos := X;
-  for i:=1 to Length(S) do begin
-    Word := Copy(s, i, 1);
+  for i:=1 to UTF8Length(S) do begin
+    Word := UTF8Copy(s, i, 1);
     Canvas.TextOut(Round(Pos), Y, Word);
-    with APdfCanvas do
+    with APdfCanvas do begin
       Pos := Pos + TextWidth(Word) + Attribute.CharSpace;
-    if Word=' ' then
-      Pos := Pos + FWordSpace
+      if Word=' ' then
+        Pos := Pos + Attribute.WordSpace;
+    end;
   end;
   result := Pos;
 end;
@@ -1817,7 +1826,7 @@ begin
 
   PdfCanvas := GetInternalDoc.Canvas;
 
-  // setting canvas attribute to the internal doc(to get font information).
+  // setting canvas attribute to the internal doc(to get font infomation).
   SetCanvasProperties(PdfCanvas);
 
   with Canvas do
@@ -1866,8 +1875,11 @@ var
   tmpWidth: Single;
   tmpCharSpace: Single;
   CharCount: integer;
+  {$IFDEF LAZ_POWERPDF}
+  str: string;
+  {$ENDIF}
 begin
-  // setting canvas attribute to the internal doc(to get font information).
+  // setting canvas attribute to the internal doc(to get font infomation).
   with ACanvas do
   begin
     SetFont(GetFontClassName, FontSize);
@@ -1876,6 +1888,15 @@ begin
     if AlignJustified then
     begin
       SetCharSpace(0);
+      {$IFDEF LAZ_POWERPDF}
+      str := UTF8Trim(Caption, [u8tKeepStart]);
+      tmpWidth := TextWidth(str);
+      CharCount := _GetSpcCount(str);
+      if CharCount>0 then begin
+        tmpCharSpace := (Self.Width - tmpWidth) / CharCount;
+        SetWordSpace(tmpCharSpace);
+      end;
+      {$ELSE}
       tmpWidth := TextWidth(Caption);
       CharCount := _GetCharCount(Caption);
       if CharCount > 1 then
@@ -1884,6 +1905,7 @@ begin
         tmpCharSpace := 0;
       if tmpCharSpace > 0 then
         SetCharSpace(tmpCharSpace);
+      {$ENDIF}
     end
     else
       SetCharSpace(CharSpace);
@@ -1964,7 +1986,7 @@ begin
   // this is useless way, but I don't think of more smart way.
   PdfCanvas := GetInternalDoc.Canvas;
 
-  // setting canvas attribute to the internal doc(to get font information).
+  // setting canvas attribute to the internal doc(to get font infomation).
   with PdfCanvas do
   begin
     SetFont(GetFontClassName, FontSize);
@@ -2109,6 +2131,7 @@ begin
   inherited Create(AOwner);
   FLineColor := clBlack;
   FFillColor := clNone;
+  FGradientColor := clNone;
 end;
 
 // SetLineColor
@@ -2121,6 +2144,13 @@ begin
   end;
 end;
 
+procedure TPRShape.SetGradientDirection(AValue: TGradientDirection);
+begin
+  if FGradientDirection = AValue then Exit;
+  FGradientDirection := AValue;
+  Invalidate;
+end;
+
 // SetLineStyle
 procedure TPRShape.SetLineStyle(Value: TPenStyle);
 begin
@@ -2129,6 +2159,13 @@ begin
     FLineStyle := Value;
     Invalidate;
   end;
+end;
+
+procedure TPRShape.SetGradientColor(AValue: TColor);
+begin
+  if FGradientColor = AValue then Exit;
+  FGradientColor := AValue;
+  Invalidate;
 end;
 
 procedure TPRShape.StdFillOrStroke(ACanvas: TPdfCanvas);
@@ -2261,8 +2298,12 @@ begin
     begin
       Brush.Color := FFillColor;
       Brush.Style := bsSolid;
-      if ARadius=0 then
-        FillRect(ARect);
+      if ARadius=0 then begin
+        if GradientColor <> clNone then
+          GradientFill(ARect, ColorToRGB(FFillColor), ColorToRGB(GradientColor), GradientDirection)
+        else
+          FillRect(ARect);
+      end;
     end
     else
       Brush.Style := bsClear;
@@ -2273,7 +2314,7 @@ begin
       Pen.Width := Round(FLineWidth);
       Pen.Color := FLineColor;
       if ARadius=0 then
-        Polygon([Point(Left,Top), Point(Right,Top),
+        Polyline([Point(Left,Top), Point(Right,Top),
           Point(Right,Bottom), Point(Left,Bottom)]);
     end;
 
@@ -2293,17 +2334,17 @@ begin
   with ARect do
   begin
     Top := PageHeight - Top;
-    if Height > 1 then
+    if self.Height > 1 then
       Bottom := PageHeight - Bottom + 1
     else
       Bottom := PageHeight - Bottom;
-    if Width > 1 then
+    if self.Width > 1 then
       Right := Right - 1;
 
-    if (Height <= 1) and (Width <= 1) then Exit;
+    if (self.Height <= 1) and (self.Width <= 1) then Exit;
 
     if (LineColor = clNone) or (LineStyle = psClear) then
-      if (Height <= 1) or (Width <= 1) then Exit;
+      if (self.Height <= 1) or (self.Width <= 1) then Exit;
 
     SetDash(ACanvas.PdfCanvas, FLineStyle);
 
@@ -2311,6 +2352,15 @@ begin
 
     with ACanvas.PdfCanvas do
     begin
+
+      if self.GradientColor<>clNone then
+        case Self.GradientDirection of
+          gdVertical:
+            SetGradientFill(2, ColorToRGB(FillColor), ColorToRGB(GradientColor), [0,Top,0,Bottom]);
+          gdHorizontal:
+            SetGradientFill(2, ColorToRGB(FillColor), ColorToRGB(GradientColor), [Left,0,Right,0]);
+        end;
+
       if ARadius<>0.0 then
         RoundRect(Left, Bottom, Right-Left, Top-Bottom, ARadius, ARadius,
           SquaredCorners)
@@ -2329,7 +2379,17 @@ begin
       end;
     end;
 
-    StdFillOrStroke(ACanvas.PDFCanvas);
+    if self.GradientColor<>clNone then
+    begin
+      if (LineColor = clNone) or (LineStyle = psClear) then
+      begin
+        ACanvas.PdfCanvas.Closepath;
+        ACanvas.PdfCanvas.Fill;
+      end else
+        ACanvas.PdfCanvas.ClosepathFillStroke
+    end
+    else
+      StdFillOrStroke(ACanvas.PDFCanvas);
   end;
 end;
 
@@ -2378,17 +2438,17 @@ begin
   with ARect do
   begin
     Top := PageHeight - Top;
-    if Height > 1 then
+    if self.Height > 1 then
       Bottom := PageHeight - Bottom + 1
     else
       Bottom := PageHeight - Bottom;
-    if Width > 1 then
+    if self.Width > 1 then
       Right := Right - 1;
 
-    if (Height <= 1) and (Width <= 1) then Exit;
+    if (self.Height <= 1) and (self.Width <= 1) then Exit;
 
     if (LineColor = clNone) or (LineStyle = psClear) then
-      if (Height <= 1) or (Width <= 1) then Exit;
+      if (self.Height <= 1) or (self.Width <= 1) then Exit;
 
     SetDash(ACanvas.PdfCanvas, FLineStyle);
 
@@ -2479,8 +2539,8 @@ begin
   end;
   with ARect, ACanvas.PdfCanvas do
     if FStretch then begin
-      AWidth := Width;
-      AHeight := Height;
+      AWidth := self.Width;
+      AHeight := self.Height;
       if FProportional then
         CalcProportionalBounds(AWidth, AHeight);
       DrawXObject(Left, GetPage.Height - Top - AHeight, AWidth, AHeight, FXObjectName)
@@ -2489,7 +2549,7 @@ begin
       WidthF := FPicture.Width * ScaleX;
       HeightF := FPicture.Height * ScaleY;
       DrawXObjectEx(Left, GetPage.Height - Top - HeightF, WidthF, HeightF,
-            Left, GetPage.Height - Top - Height, Width, Height, FXObjectName);
+            Left, GetPage.Height - Top - self.Height, self.Width, self.Height, FXObjectName);
     end;
 end;
 

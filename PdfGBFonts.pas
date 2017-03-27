@@ -1,7 +1,7 @@
 {*
  * << P o w e r P d f >> -- PdfGBFonts.pas
  *
- * << Japanese font set for Shift-JIS Characters >>
+ * << Japanese font set for Shift-JIS Charactors >>
  *
  * Copyright (c) 1999-1101 Takezou. <takeshi_kanno@est.hi-ho.ne.jp>
  *
@@ -59,24 +59,20 @@ const
 type
   TCharToCMap = function(S: string; Index: integer): integer;
 
-  { TPdfGBFont }
-
   TPdfGBFont = class(TPdfType0Font)
   protected
     procedure AddDescriptorItem(AFontDescriptor: TPdfDictionary); virtual;
     procedure AddDescendantFontItem(ADescendantFont: TPdfDictionary); virtual;
     function GetFontName: string; virtual;
   public
-    constructor Create(AXref: TPdfXref; AName: string); override;
+    constructor Create(AXref: TPdfXref; const AName: string); override;
   end;
-
-  { TPdfGBFixedFont }
 
   TPdfGBFixedFont = class(TPdfGBFont)
   protected
     procedure AddDescendantFontItem(ADescendantFont: TPdfDictionary); override;
   public
-    constructor Create(AXref: TPdfXref; AName: string); override;
+    constructor Create(AXref: TPdfXref; const AName: string); override;
   end;
 
   TPdfChinese = class(TPdfGBFixedFont)
@@ -119,7 +115,7 @@ begin
 end;
 
 // Create
-constructor TPdfGBFont.Create(AXref: TPdfXref; AName: string);
+constructor TPdfGBFont.Create(AXref: TPdfXref; const AName: string);
 var
   FFontDescriptor: TPdfDictionary;
   FFont: TPdfDictionary;
@@ -183,7 +179,7 @@ begin
   ADescendantFont.AddItem('W', FWidths);
 end;
 
-constructor TPdfGBFixedFont.Create(AXref: TPdfXref; AName: string);
+constructor TPdfGBFixedFont.Create(AXref: TPdfXref; const AName: string);
 begin
   inherited Create(AXref, AName);
   AddStrElements(Data, TYPE0_GB_FONT_STR_TABLE);

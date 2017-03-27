@@ -21,7 +21,7 @@
         <CustomOptions Value="-dLAZ_POWERPDF"/>
       </Other>
     </CompilerOptions>
-    <Version Minor="9" Release="14"/>
+    <Version Minor="9" Release="15"/>
     <Files Count="12">
       <Item1>
         <Filename Value="PdfTypes.pas"/>
@@ -73,17 +73,14 @@
         <UnitName Value="PowerPdf"/>
       </Item12>
     </Files>
-    <RequiredPkgs Count="3">
+    <RequiredPkgs Count="2">
       <Item1>
-        <PackageName Value="sparta_generics"/>
+        <PackageName Value="LCL"/>
       </Item1>
       <Item2>
-        <PackageName Value="LCL"/>
-      </Item2>
-      <Item3>
         <PackageName Value="FCL"/>
         <MinVersion Major="1" Valid="True"/>
-      </Item3>
+      </Item2>
     </RequiredPkgs>
     <UsageOptions>
       <UnitPath Value="$(PkgOutDir)"/>
